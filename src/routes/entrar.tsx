@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Brand } from "@/components/app-header";
@@ -8,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { adminSetupStatus, loginWithLimit, sendAdminSetupLink } from "@/lib/admin.functions";
+import { loginWithLimit, sendAdminSetupLink } from "@/lib/admin.functions";
 import { useSession } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
 
@@ -24,7 +23,6 @@ function Entrar() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; locked: boolean } | null>(null);
-  const setup = useQuery({ queryKey: ["admin-setup"], queryFn: () => adminSetupStatus() });
   const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
@@ -90,30 +88,28 @@ function Entrar() {
         <p className="mt-6 text-xs text-muted-foreground">
           Não tem conta? Só o administrador do sistema pode cadastrar novos usuários. Peça a ele o seu acesso.
         </p>
-        {setup.data?.needsSetup && (
-          <div className="mt-4">
-            {setupOpen ? (
-              <AdminSetup />
-            ) : (
-              <button type="button" onClick={() => setSetupOpen(true)} className="text-sm text-primary hover:underline">
-                Primeiro acesso do administrador
-              </button>
-            )}
-          </div>
-        )}
+        <div className="mt-4">
+          {setupOpen ? (
+            <AdminSetup initialEmail={email} />
+          ) : (
+            <button type="button" onClick={() => setSetupOpen(true)} className="text-sm text-primary hover:underline">
+              Esqueci a senha / primeiro acesso do administrador
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function AdminSetup() {
-  const [email, setEmail] = useState("");
+function AdminSetup({ initialEmail }: { initialEmail: string }) {
+  const [email, setEmail] = useState(initialEmail);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   if (sent)
     return (
       <p className="rounded-lg border bg-card p-3 text-sm">
-        Pronto! Abra o e-mail do administrador e clique no link para definir a senha.
+        Pronto! Se este e-mail tiver acesso, chega em instantes um link para definir a senha. Confira também o spam.
       </p>
     );
   return (
@@ -133,7 +129,7 @@ function AdminSetup() {
         }
       }}
     >
-      <Label htmlFor="admin-email">E-mail do administrador</Label>
+      <Label htmlFor="admin-email">Seu e-mail</Label>
       <Input id="admin-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
         Enviar link para definir a senha

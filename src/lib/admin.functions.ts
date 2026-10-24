@@ -36,8 +36,12 @@ async function publicAuthClient() {
 
 const norm = (e: string) => e.trim().toLowerCase();
 
+/** Built-in administrator, valid even before the app_admins table exists. */
+const BOOTSTRAP_ADMINS = ["tm776968@gmail.com"];
+
 async function isAdminEmail(db: Db, email: string | undefined) {
   if (!email) return false;
+  if (BOOTSTRAP_ADMINS.includes(norm(email))) return true;
   const { data } = await db.from("app_admins").select("email").ilike("email", norm(email)).maybeSingle();
   return !!data;
 }
@@ -107,9 +111,15 @@ export const adminSetupStatus = createServerFn({ method: "GET" }).handler(async 
 export const sendAdminSetupLink = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string; redirectTo: string }) => ({ email: norm(String(d.email ?? "")), redirectTo: String(d.redirectTo ?? "") }))
   .handler(async ({ data }) => {
+    const generic = {
+      ok: true,
+      message: "Se este e-mail tiver acesso ao sistema, você vai receber um link para definir a senha. Confira também o spam.",
+    };
+    if (!data.email.includes("@")) return { ok: false, message: "Informe um e-mail válido." };
     const db = await adminDb();
-    if (!(await isAdminEmail(db, data.email))) return { ok: false, message: "Este e-mail não é de um administrador." };
+    // The administrator's account is created on first access; everyone else must be created by the administrator.
     if (!(await findUserByEmail(db, data.email))) {
+      if (!(await isAdminEmail(db, data.email))) return generic;
       const tmp = crypto.randomUUID() + crypto.randomUUID();
       const { error } = await db.auth.admin.createUser({
         email: data.email,
@@ -118,12 +128,12 @@ export const sendAdminSetupLink = createServerFn({ method: "POST" })
         app_metadata: { created_by_admin: true },
         user_metadata: { full_name: "Administrador" },
       });
-      if (error) return { ok: false, message: error.message };
+      if (error && !/already/i.test(error.message)) return { ok: false, message: error.message };
     }
     const auth = await publicAuthClient();
     const { error } = await auth.auth.resetPasswordForEmail(data.email, { redirectTo: data.redirectTo });
     if (error) return { ok: false, message: error.message };
-    return { ok: true, message: "Enviamos um link para o e-mail do administrador definir a senha." };
+    return generic;
   });
 
 /* ---------------- user administration (admin only) ---------------- */
@@ -159,7 +169,7 @@ export const listUsers = createServerFn({ method: "GET" })
     const { data, error } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (error) throw new Error(error.message);
     const [{ data: admins }, { data: attempts }] = await Promise.all([db.from("app_admins").select("email"), db.from("login_attempts").select("*")]);
-    const adminSet = new Set(((admins ?? []) as { email: string }[]).map((a) => norm(a.email)));
+    const adminSet = new Set([...BOOTSTRAP_ADMINS, ...((admins ?? []) as { email: string }[]).map((a) => norm(a.email))]);
     const att = new Map(((attempts ?? []) as { email: string; failed: number; locked: boolean }[]).map((a) => [a.email, a]));
     return (data.users as { id: string; email?: string; created_at: string; last_sign_in_at?: string; user_metadata?: Record<string, unknown> }[])
       .map((u) => {
