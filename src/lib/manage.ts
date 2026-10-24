@@ -36,20 +36,20 @@ export async function createTournament(name: string, sport: string) {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) throw new Error("Faça login novamente.");
   const slug = `${slugify(name) || "torneio"}-${Math.random().toString(36).slice(2, 6)}`;
-  const { data, error } = await supabase
-    .from("tournaments")
-    .insert({
-      name,
-      sport,
-      slug,
-      owner_id: u.user.id,
-      settings: DEFAULT_SETTINGS as unknown as Json,
-    })
-    .select()
-    .single();
+  // The id is generated here instead of reading the row back: the read policy checks the
+  // tournaments table itself, which can't see the new row inside the same INSERT statement.
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from("tournaments").insert({
+    id,
+    name,
+    sport,
+    slug,
+    owner_id: u.user.id,
+    settings: DEFAULT_SETTINGS as unknown as Json,
+  });
   if (error) throw error;
-  await resetEventTypes(data.id, sport);
-  return data;
+  await resetEventTypes(id, sport);
+  return { id, slug };
 }
 
 /** Replaces the scout event types with the sport's default set. */
