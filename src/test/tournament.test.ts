@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { roundRobin, knockout, standings, DEFAULT_SETTINGS, suspendedPlayers } from "@/lib/tournament";
+import { roundRobin, knockout, standings, DEFAULT_SETTINGS, suspendedPlayers, doubleElimination } from "@/lib/tournament";
 
 describe("geração de tabela", () => {
   it("pontos corridos turno único: 4 equipes = 6 jogos", () => {
@@ -54,5 +54,40 @@ describe("suspensão", () => {
     const ms = ["m1", "m2", "m3", "m4"].map((id) => ({ id, status: "encerrado" }));
     expect(suspendedPlayers(ev, types, ms, "m4", DEFAULT_SETTINGS).has("p")).toBe(true);
     expect(suspendedPlayers(ev.slice(0, 2), types, ms, "m3", DEFAULT_SETTINGS).has("p")).toBe(false);
+  });
+});
+
+describe("dupla eliminação", () => {
+  it("8 equipes: 7 jogos na chave dos vencedores, 6 na dos perdedores e a grande final", () => {
+    const ms = doubleElimination(["1", "2", "3", "4", "5", "6", "7", "8"]);
+    expect(ms.filter((m) => m.stage === "vencedores").length).toBe(7);
+    expect(ms.filter((m) => m.stage === "perdedores").length).toBe(6);
+    expect(ms.filter((m) => m.stage === "grande_final").length).toBe(1);
+  });
+  it("todo jogo aponta para um jogo que existe, e cada vaga recebe só uma equipe", () => {
+    const ms = doubleElimination(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"]);
+    const keys = new Set(ms.map((m) => m.key));
+    const filled = new Map<string, number>();
+    for (const m of ms) {
+      if (m.next_key) {
+        expect(keys.has(m.next_key)).toBe(true);
+        const k = `${m.next_key}:${m.next_slot}`;
+        filled.set(k, (filled.get(k) ?? 0) + 1);
+      }
+      if (m.loser_key) {
+        expect(keys.has(m.loser_key)).toBe(true);
+        const k = `${m.loser_key}:${m.loser_slot}`;
+        filled.set(k, (filled.get(k) ?? 0) + 1);
+      }
+    }
+    for (const v of filled.values()) expect(v).toBe(1);
+    // every losers/final slot is fed exactly once
+    for (const m of ms.filter((x) => x.stage !== "vencedores")) {
+      expect(filled.get(`${m.key}:home`)).toBe(1);
+      expect(filled.get(`${m.key}:away`)).toBe(1);
+    }
+  });
+  it("recusa número de equipes que não é potência de 2", () => {
+    expect(doubleElimination(["1", "2", "3", "4", "5", "6"]).length).toBe(0);
   });
 });
