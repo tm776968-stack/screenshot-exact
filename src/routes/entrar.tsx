@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Brand } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { adminSetupStatus, loginWithLimit, sendAdminSetupLink } from "@/lib/admin.functions";
 import { useSession } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
 
@@ -14,22 +17,15 @@ export const Route = createFileRoute("/entrar")({
   component: Entrar,
 });
 
-function translate(msg: string) {
-  if (/invalid login/i.test(msg)) return "E-mail ou senha incorretos.";
-  if (/already registered/i.test(msg)) return "Este e-mail já tem conta. Use a opção Entrar.";
-  if (/email not confirmed/i.test(msg)) return "Confirme seu e-mail pelo link que enviamos antes de entrar.";
-  if (/at least 6/i.test(msg)) return "A senha precisa ter pelo menos 6 caracteres.";
-  return msg;
-}
-
 function Entrar() {
   const { session } = useSession();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; locked: boolean } | null>(null);
+  const setup = useQuery({ queryKey: ["admin-setup"], queryFn: () => adminSetupStatus() });
+  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
     if (session) navigate({ to: "/painel" });
@@ -38,24 +34,18 @@ function Entrar() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setNotice(null);
     try {
-      if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const r = await loginWithLimit({ data: { email, password } });
+      if (r.ok) {
+        const { error } = await supabase.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token });
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: name }, emailRedirectTo: `${window.location.origin}/painel` },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          toast.success("Conta criada! Enviamos um link de confirmação para o seu e-mail.");
-          setMode("login");
-        }
+        setNotice({ text: r.message, locked: r.locked });
+        setPassword("");
       }
     } catch (err) {
-      toast.error(translate(errMsg(err)));
+      toast.error(errMsg(err));
     } finally {
       setBusy(false);
     }
@@ -67,17 +57,11 @@ function Entrar() {
         <Brand />
       </div>
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center pb-16">
-        <h1 className="text-4xl uppercase">{mode === "login" ? "Entrar" : "Criar conta"}</h1>
+        <h1 className="text-4xl uppercase">Entrar</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Área do organizador. Quem só acompanha o torneio não precisa de conta.
         </p>
         <form onSubmit={submit} className="mt-6 space-y-4 rounded-xl border bg-card p-5">
-          {mode === "signup" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="name">Seu nome</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-            </div>
-          )}
           <div className="space-y-1.5">
             <Label htmlFor="email">E-mail</Label>
             <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
@@ -88,27 +72,72 @@ function Entrar() {
               id="password"
               type="password"
               required
-              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              autoComplete="current-password"
             />
           </div>
+          {notice && (
+            <p className={notice.locked ? "flex gap-2 rounded-lg bg-destructive/15 p-3 text-sm text-destructive" : "text-sm text-warning"}>
+              {notice.locked && <Lock className="mt-0.5 h-4 w-4 shrink-0" />}
+              {notice.text}
+            </p>
+          )}
           <Button type="submit" className="w-full" size="lg" disabled={busy}>
-            {busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
+            {busy ? "Aguarde..." : "Entrar"}
           </Button>
         </form>
-        <button
-          type="button"
-          onClick={() => setMode(mode === "login" ? "signup" : "login")}
-          className="mt-4 text-sm text-muted-foreground hover:text-primary"
-        >
-          {mode === "login" ? "Ainda não tem conta? Criar conta" : "Já tem conta? Entrar"}
-        </button>
         <p className="mt-6 text-xs text-muted-foreground">
-          Foi convidado como co-organizador? Crie a conta com o mesmo e-mail do convite e o torneio aparece no seu painel.
+          Não tem conta? Só o administrador do sistema pode cadastrar novos usuários. Peça a ele o seu acesso.
         </p>
+        {setup.data?.needsSetup && (
+          <div className="mt-4">
+            {setupOpen ? (
+              <AdminSetup />
+            ) : (
+              <button type="button" onClick={() => setSetupOpen(true)} className="text-sm text-primary hover:underline">
+                Primeiro acesso do administrador
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function AdminSetup() {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  if (sent)
+    return (
+      <p className="rounded-lg border bg-card p-3 text-sm">
+        Pronto! Abra o e-mail do administrador e clique no link para definir a senha.
+      </p>
+    );
+  return (
+    <form
+      className="space-y-2 rounded-xl border bg-card p-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        try {
+          const r = await sendAdminSetupLink({ data: { email, redirectTo: `${window.location.origin}/definir-senha` } });
+          if (r.ok) setSent(true);
+          else toast.error(r.message);
+        } catch (err) {
+          toast.error(errMsg(err));
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <Label htmlFor="admin-email">E-mail do administrador</Label>
+      <Input id="admin-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+      <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
+        Enviar link para definir a senha
+      </Button>
+    </form>
   );
 }

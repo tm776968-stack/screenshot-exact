@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Plus, Settings2, Tv, Users } from "lucide-react";
+import { ExternalLink, Plus, Settings2, Shield, Tv, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader, PageLoading } from "@/components/app-header";
 import { Empty } from "@/components/views";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { amIAdmin } from "@/lib/admin.functions";
 import { useRequireAuth } from "@/lib/auth";
 import type { Tournament } from "@/lib/data";
 import { createTournament, errMsg } from "@/lib/manage";
@@ -46,6 +47,7 @@ function Painel() {
   const { user, loading } = useRequireAuth();
   const q = useMyTournaments(user?.id, user?.email);
   const [open, setOpen] = useState(false);
+  const adm = useQuery({ queryKey: ["am-i-admin"], enabled: !!user, queryFn: () => amIAdmin() });
   if (loading || !user) return <PageLoading />;
   const all = [...(q.data?.own ?? []), ...(q.data?.shared ?? [])];
   const live = all.filter((t) => t.status === "andamento").length;
@@ -60,9 +62,18 @@ function Painel() {
               {all.length} torneio{all.length === 1 ? "" : "s"} · {live} em andamento
             </p>
           </div>
-          <Button onClick={() => setOpen(true)} className="shadow-glow">
-            <Plus /> Novo torneio
-          </Button>
+          <div className="flex gap-2">
+            {adm.data?.admin && (
+              <Button asChild variant="secondary">
+                <Link to="/usuarios">
+                  <Shield /> Usuários
+                </Link>
+              </Button>
+            )}
+            <Button onClick={() => setOpen(true)} className="shadow-glow">
+              <Plus /> Novo torneio
+            </Button>
+          </div>
         </div>
 
         <div className="mt-6 space-y-3">

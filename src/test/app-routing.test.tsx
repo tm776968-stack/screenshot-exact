@@ -17,7 +17,7 @@ describe("App routing", () => {
 });
 
 describe("Páginas do sistema", () => {
-  it.each(["/entrar", "/painel", "/painel/abc", "/sumula/abc", "/t/copa-da-vila", "/tv/copa-da-vila"])(
+  it.each(["/entrar", "/definir-senha", "/usuarios", "/painel", "/painel/abc", "/sumula/abc", "/t/copa-da-vila", "/tv/copa-da-vila"])(
     "encontra uma página para %s",
     (path) => {
       const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });

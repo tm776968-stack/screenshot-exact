@@ -120,7 +120,7 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
   return (
     <Section
       title="Co-organizadores"
-      description="Eles editam este torneio com as mesmas permissões que você. Basta entrar (ou criar conta) com o e-mail convidado."
+      description="Eles editam este torneio com as mesmas permissões que você. A pessoa precisa ter uma conta com esse e-mail, criada pelo administrador do sistema."
     >
       {isOwner && (
         <form
@@ -170,7 +170,7 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
       </div>
       {isOwner && (
         <p className="mt-3 text-xs text-muted-foreground">
-          O sistema não envia e-mail automaticamente: avise a pessoa e mande o link do painel.
+          O sistema não envia e-mail automaticamente: avise a pessoa. Se ela ainda não tiver conta, peça ao administrador para criar.
         </p>
       )}
     </Section>

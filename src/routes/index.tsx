@@ -52,7 +52,7 @@ function Index() {
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg" className="shadow-glow">
               <Link to={session ? "/painel" : "/entrar"}>
-                <Trophy /> {session ? "Ir para meus torneios" : "Criar meu torneio"}
+                <Trophy /> {session ? "Ir para meus torneios" : "Entrar como organizador"}
               </Link>
             </Button>
           </div>

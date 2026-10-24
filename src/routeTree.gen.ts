@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as UsuariosRouteImport } from './routes/usuarios'
+import { Route as DefinirSenhaRouteImport } from './routes/definir-senha'
 import { Route as PainelIndexRouteImport } from './routes/painel/index'
 import { Route as PainelIdRouteImport } from './routes/painel/$id'
 import { Route as SumulaMatchIdRouteImport } from './routes/sumula/$matchId'
@@ -20,6 +22,16 @@ import { Route as TvSlugRouteImport } from './routes/tv/$slug'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DefinirSenhaRoute = DefinirSenhaRouteImport.update({
+  id: '/definir-senha',
+  path: '/definir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsuariosRoute = UsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -54,6 +66,8 @@ const TvSlugRoute = TvSlugRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/usuarios': typeof UsuariosRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
   '/painel/': typeof PainelIndexRoute
@@ -63,6 +77,8 @@ export interface FileRoutesByFullPath {
   '/tv/$slug': typeof TvSlugRoute
 }
 export interface FileRoutesByTo {
+  '/usuarios': typeof UsuariosRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
   '/painel': typeof PainelIndexRoute
@@ -73,6 +89,8 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/usuarios': typeof UsuariosRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
   '/painel/': typeof PainelIndexRoute
@@ -84,6 +102,8 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/usuarios'
+    | '/definir-senha'
     | '/'
     | '/entrar'
     | '/painel/'
@@ -93,6 +113,8 @@ export interface FileRouteTypes {
     | '/tv/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/usuarios'
+    | '/definir-senha'
     | '/'
     | '/entrar'
     | '/painel'
@@ -102,6 +124,8 @@ export interface FileRouteTypes {
     | '/tv/$slug'
   id:
     | '__root__'
+    | '/usuarios'
+    | '/definir-senha'
     | '/'
     | '/entrar'
     | '/painel/'
@@ -112,6 +136,8 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  UsuariosRoute: typeof UsuariosRoute
+  DefinirSenhaRoute: typeof DefinirSenhaRoute
   IndexRoute: typeof IndexRoute
   EntrarRoute: typeof EntrarRoute
   PainelIndexRoute: typeof PainelIndexRoute
@@ -123,6 +149,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/usuarios': {
+      id: '/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof UsuariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/definir-senha': {
+      id: '/definir-senha'
+      path: '/definir-senha'
+      fullPath: '/definir-senha'
+      preLoaderRoute: typeof DefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -176,6 +216,8 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  UsuariosRoute: UsuariosRoute,
+  DefinirSenhaRoute: DefinirSenhaRoute,
   IndexRoute: IndexRoute,
   EntrarRoute: EntrarRoute,
   PainelIndexRoute: PainelIndexRoute,
