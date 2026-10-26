@@ -6,12 +6,12 @@ import { readSettings, standings, STAGE_LABEL } from "@/lib/tournament";
 import { TeamCrest } from "@/components/sport";
 
 /* ---------- Bracket ---------- */
-export function Bracket({ b, focusTeam, stages }: { b: Bundle; focusTeam?: string | null; stages?: string[] }) {
+export function Bracket({ b, focusTeam }: { b: Bundle; focusTeam?: string | null }) {
   const [hover, setHover] = useState<string | null>(focusTeam ?? null);
   const active = hover ?? focusTeam ?? null;
   const teams = teamMap(b.teams);
-  const ko = b.matches.filter((m) => (stages ? stages.includes(m.stage) : !["liga", "grupo", "terceiro", "vencedores", "perdedores", "grande_final"].includes(m.stage)));
-  const third = stages ? undefined : b.matches.find((m) => m.stage === "terceiro");
+  const ko = b.matches.filter((m) => !["liga", "grupo", "terceiro"].includes(m.stage));
+  const third = b.matches.find((m) => m.stage === "terceiro");
   const rounds = [...new Set(ko.map((m) => m.round))].sort((a, b) => a - b);
   if (!ko.length) return <Empty>O chaveamento ainda não foi gerado.</Empty>;
   return (
@@ -21,7 +21,7 @@ export function Bracket({ b, focusTeam, stages }: { b: Bundle; focusTeam?: strin
           const ms = ko.filter((m) => m.round === r).sort((a, b) => (a.bracket_pos ?? 0) - (b.bracket_pos ?? 0));
           return (
             <div key={r} className="flex w-56 flex-col">
-              <div className="mb-3 font-display text-sm uppercase tracking-wider text-muted-foreground">{ms[0].stage === "vencedores" || ms[0].stage === "perdedores" ? `Rodada ${r}` : STAGE_LABEL[ms[0].stage]}</div>
+              <div className="mb-3 font-display text-sm uppercase tracking-wider text-muted-foreground">{STAGE_LABEL[ms[0]?.stage ?? ""]}</div>
               <div className="flex flex-1 flex-col justify-around gap-4">
                 {ms.map((m) => (
                   <BracketMatch key={m.id} m={m} teams={teams} active={active} onHover={setHover} />
@@ -132,7 +132,7 @@ export function StandingsView({ b }: { b: Bundle }) {
 }
 
 /* ---------- Stats / rankings ---------- */
-export function StatsView({ b, onTeam }: { b: Bundle; onTeam?: (id: string) => void }) {
+export function StatsView({ b, onTeam }: { b: Bundle; onTeam?: ((id: string) => void) | undefined }) {
   const teams = teamMap(b.teams);
   const players = new Map(b.players.map((p) => [p.id, p]));
   const enabled = b.eventTypes.filter((e) => e.enabled);
@@ -190,7 +190,7 @@ export function StatsView({ b, onTeam }: { b: Bundle; onTeam?: (id: string) => v
   );
 }
 
-function MiniRank({ title, rows, onTeam, suffix }: { title: string; rows: { t: Team; v: number }[]; onTeam?: (id: string) => void; suffix?: string }) {
+function MiniRank({ title, rows, onTeam, suffix }: { title: string; rows: { t: Team; v: number }[]; onTeam?: ((id: string) => void) | undefined; suffix?: string }) {
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-2 font-display text-lg">{title}</div>

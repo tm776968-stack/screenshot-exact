@@ -11,7 +11,7 @@ export function LiveBadge({ className }: { className?: string }) {
   );
 }
 
-export function TeamCrest({ team, size = 28 }: { team?: Team | null; size?: number }) {
+export function TeamCrest({ team, size = 28 }: { team?: Team | null | undefined; size?: number }) {
   if (team?.logo_url)
     return <img src={team.logo_url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover bg-muted" />;
   return (

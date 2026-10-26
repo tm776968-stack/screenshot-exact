@@ -244,9 +244,6 @@ export const STAGE_LABEL: Record<string, string> = {
   oitavas: "Oitavas de final",
   mata: "Mata-mata",
   terceiro: "Disputa de 3º lugar",
-  vencedores: "Chave dos vencedores",
-  perdedores: "Chave dos perdedores",
-  grande_final: "Grande final",
 };
 
 /** Standard seeding order for a bracket of size n (1-indexed seeds). */
@@ -306,7 +303,7 @@ export function shuffle<T>(a: T[]): T[] {
   const arr = [...a];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tmp = arr[i]!; arr[i] = arr[j]!; arr[j] = tmp;
   }
   return arr;
 }
@@ -318,8 +315,8 @@ export function splitGroups(teamIds: string[], groups: number): Record<string, s
   teamIds.forEach((id, idx) => {
     const row = Math.floor(idx / groups);
     const col = idx % groups;
-    const g = names[row % 2 === 0 ? col : groups - 1 - col];
-    res[g].push(id);
+    const g = names[row % 2 === 0 ? col : groups - 1 - col]!;
+    res[g]!.push(id);
   });
   return res;
 }
@@ -434,125 +431,5 @@ export function suspendedPlayers(
     const redHit = s.suspensionReds > 0 && c.r >= s.suspensionReds;
     if ((yellowHit || redHit) && c.lastMatchCard === lastPrior) out.add(pid);
   });
-  return out;
-}
-
-/* ---------------- double elimination ---------------- */
-
-export interface DoubleElimMatch extends NewMatch {
-  /** Where the loser of this match goes (winners bracket only). */
-  loser_key?: string | null;
-  loser_slot?: "home" | "away" | null;
-}
-
-/**
- * Double elimination for a power-of-two number of teams (4, 8, 16, 32...).
- * Winners bracket (stage "vencedores"), losers bracket ("perdedores") and a
- * single grand final ("grande_final"). Teams in seed order, best first.
- */
-export function doubleElimination(teamIds: string[]): DoubleElimMatch[] {
-  const n = teamIds.length;
-  if (n < 4 || (n & (n - 1)) !== 0) return [];
-  const k = Math.log2(n);
-  const order = seedOrder(n);
-  const slots = order.map((s) => teamIds[s - 1] ?? null);
-  const out: DoubleElimMatch[] = [];
-  const W = (r: number, i: number) => `W-${r}-${i}`;
-  const L = (r: number, i: number) => `L-${r}-${i}`;
-
-  // winners bracket
-  for (let r = 1; r <= k; r++) {
-    const count = n / 2 ** r;
-    for (let i = 0; i < count; i++) {
-      out.push({
-        key: W(r, i),
-        stage: "vencedores",
-        round: r,
-        bracket_pos: i,
-        home_team_id: r === 1 ? slots[i * 2]! : null,
-        away_team_id: r === 1 ? slots[i * 2 + 1]! : null,
-        next_key: r < k ? W(r + 1, Math.floor(i / 2)) : "GF",
-        next_slot: r < k ? (i % 2 === 0 ? "home" : "away") : "home",
-      });
-    }
-  }
-
-  // losers bracket: 2(k-1) rounds
-  const lRounds = 2 * (k - 1);
-  for (let lr = 1; lr <= lRounds; lr++) {
-    const count = n / 2 ** (Math.floor((lr + 1) / 2) + 1);
-    for (let i = 0; i < count; i++) {
-      const last = lr === lRounds;
-      let next_key: string;
-      let next_slot: "home" | "away";
-      if (last) {
-        next_key = "GF";
-        next_slot = "away";
-      } else if (lr % 2 === 1) {
-        // odd round feeds the even round 1:1 (meets a loser dropping from winners)
-        next_key = L(lr + 1, i);
-        next_slot = "home";
-      } else {
-        next_key = L(lr + 1, Math.floor(i / 2));
-        next_slot = i % 2 === 0 ? "home" : "away";
-      }
-      out.push({
-        key: L(lr, i),
-        stage: "perdedores",
-        round: lr,
-        bracket_pos: i,
-        home_team_id: null,
-        away_team_id: null,
-        next_key,
-        next_slot,
-      });
-    }
-  }
-
-  // losers drop-down routing
-  for (const m of out.filter((x) => x.stage === "vencedores")) {
-    const r = m.round;
-    const i = m.bracket_pos ?? 0;
-    if (r === 1) {
-      m.loser_key = L(1, Math.floor(i / 2));
-      m.loser_slot = i % 2 === 0 ? "home" : "away";
-    } else {
-      // reverse order on alternate rounds to avoid early rematches
-      const count = n / 2 ** r;
-      const j = r % 2 === 0 ? count - 1 - i : i;
-      m.loser_key = L(2 * (r - 1), j);
-      m.loser_slot = "away";
-    }
-  }
-
-  out.push({
-    key: "GF",
-    stage: "grande_final",
-    round: 1,
-    bracket_pos: 0,
-    home_team_id: null,
-    away_team_id: null,
-    next_key: null,
-    next_slot: null,
-  });
-  return out;
-}
-
-/** Qualified teams from group standings, as knockout seeds: all 1st places, then 2nd places... */
-export function groupQualifiers(
-  groups: Record<string, string[]>,
-  matches: MatchLite[],
-  s: Settings,
-): string[] {
-  const names = Object.keys(groups).sort();
-  const tables = names.map((g) =>
-    standings(groups[g] ?? [], matches.filter((m) => m.stage === "grupo" && m.group_name === g), s).map((r) => r.team_id),
-  );
-  const out: string[] = [];
-  for (let pos = 0; pos < s.qualifiersPerGroup; pos++) {
-    // alternate group order on each line so 1A meets 2B, 1B meets 2A
-    const line = tables.map((t) => t[pos]).filter(Boolean) as string[];
-    out.push(...line);
-  }
   return out;
 }

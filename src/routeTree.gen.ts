@@ -10,159 +10,37 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as EntrarRouteImport } from './routes/entrar'
-import { Route as UsuariosRouteImport } from './routes/usuarios'
-import { Route as DefinirSenhaRouteImport } from './routes/definir-senha'
-import { Route as PainelIndexRouteImport } from './routes/painel/index'
-import { Route as PainelIdRouteImport } from './routes/painel/$id'
-import { Route as SumulaMatchIdRouteImport } from './routes/sumula/$matchId'
-import { Route as TSlugRouteImport } from './routes/t/$slug'
-import { Route as TvSlugRouteImport } from './routes/tv/$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DefinirSenhaRoute = DefinirSenhaRouteImport.update({
-  id: '/definir-senha',
-  path: '/definir-senha',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UsuariosRoute = UsuariosRouteImport.update({
-  id: '/usuarios',
-  path: '/usuarios',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EntrarRoute = EntrarRouteImport.update({
-  id: '/entrar',
-  path: '/entrar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PainelIndexRoute = PainelIndexRouteImport.update({
-  id: '/painel/',
-  path: '/painel/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PainelIdRoute = PainelIdRouteImport.update({
-  id: '/painel/$id',
-  path: '/painel/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SumulaMatchIdRoute = SumulaMatchIdRouteImport.update({
-  id: '/sumula/$matchId',
-  path: '/sumula/$matchId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TSlugRoute = TSlugRouteImport.update({
-  id: '/t/$slug',
-  path: '/t/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TvSlugRoute = TvSlugRouteImport.update({
-  id: '/tv/$slug',
-  path: '/tv/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
-  '/entrar': typeof EntrarRoute
-  '/painel/': typeof PainelIndexRoute
-  '/painel/$id': typeof PainelIdRoute
-  '/sumula/$matchId': typeof SumulaMatchIdRoute
-  '/t/$slug': typeof TSlugRoute
-  '/tv/$slug': typeof TvSlugRoute
 }
 export interface FileRoutesByTo {
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
-  '/entrar': typeof EntrarRoute
-  '/painel': typeof PainelIndexRoute
-  '/painel/$id': typeof PainelIdRoute
-  '/sumula/$matchId': typeof SumulaMatchIdRoute
-  '/t/$slug': typeof TSlugRoute
-  '/tv/$slug': typeof TvSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
-  '/entrar': typeof EntrarRoute
-  '/painel/': typeof PainelIndexRoute
-  '/painel/$id': typeof PainelIdRoute
-  '/sumula/$matchId': typeof SumulaMatchIdRoute
-  '/t/$slug': typeof TSlugRoute
-  '/tv/$slug': typeof TvSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/usuarios'
-    | '/definir-senha'
-    | '/'
-    | '/entrar'
-    | '/painel/'
-    | '/painel/$id'
-    | '/sumula/$matchId'
-    | '/t/$slug'
-    | '/tv/$slug'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/usuarios'
-    | '/definir-senha'
-    | '/'
-    | '/entrar'
-    | '/painel'
-    | '/painel/$id'
-    | '/sumula/$matchId'
-    | '/t/$slug'
-    | '/tv/$slug'
-  id:
-    | '__root__'
-    | '/usuarios'
-    | '/definir-senha'
-    | '/'
-    | '/entrar'
-    | '/painel/'
-    | '/painel/$id'
-    | '/sumula/$matchId'
-    | '/t/$slug'
-    | '/tv/$slug'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  UsuariosRoute: typeof UsuariosRoute
-  DefinirSenhaRoute: typeof DefinirSenhaRoute
   IndexRoute: typeof IndexRoute
-  EntrarRoute: typeof EntrarRoute
-  PainelIndexRoute: typeof PainelIndexRoute
-  PainelIdRoute: typeof PainelIdRoute
-  SumulaMatchIdRoute: typeof SumulaMatchIdRoute
-  TSlugRoute: typeof TSlugRoute
-  TvSlugRoute: typeof TvSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/usuarios': {
-      id: '/usuarios'
-      path: '/usuarios'
-      fullPath: '/usuarios'
-      preLoaderRoute: typeof UsuariosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/definir-senha': {
-      id: '/definir-senha'
-      path: '/definir-senha'
-      fullPath: '/definir-senha'
-      preLoaderRoute: typeof DefinirSenhaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -170,61 +48,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/entrar': {
-      id: '/entrar'
-      path: '/entrar'
-      fullPath: '/entrar'
-      preLoaderRoute: typeof EntrarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/painel/': {
-      id: '/painel/'
-      path: '/painel/'
-      fullPath: '/painel/'
-      preLoaderRoute: typeof PainelIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/painel/$id': {
-      id: '/painel/$id'
-      path: '/painel/$id'
-      fullPath: '/painel/$id'
-      preLoaderRoute: typeof PainelIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sumula/$matchId': {
-      id: '/sumula/$matchId'
-      path: '/sumula/$matchId'
-      fullPath: '/sumula/$matchId'
-      preLoaderRoute: typeof SumulaMatchIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/t/$slug': {
-      id: '/t/$slug'
-      path: '/t/$slug'
-      fullPath: '/t/$slug'
-      preLoaderRoute: typeof TSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tv/$slug': {
-      id: '/tv/$slug'
-      path: '/tv/$slug'
-      fullPath: '/tv/$slug'
-      preLoaderRoute: typeof TvSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  UsuariosRoute: UsuariosRoute,
-  DefinirSenhaRoute: DefinirSenhaRoute,
   IndexRoute: IndexRoute,
-  EntrarRoute: EntrarRoute,
-  PainelIndexRoute: PainelIndexRoute,
-  PainelIdRoute: PainelIdRoute,
-  SumulaMatchIdRoute: SumulaMatchIdRoute,
-  TSlugRoute: TSlugRoute,
-  TvSlugRoute: TvSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
