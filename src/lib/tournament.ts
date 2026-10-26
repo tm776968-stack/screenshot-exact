@@ -303,7 +303,7 @@ export function shuffle<T>(a: T[]): T[] {
   const arr = [...a];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tmp = arr[i]!; arr[i] = arr[j]!; arr[j] = tmp;
   }
   return arr;
 }
@@ -315,8 +315,8 @@ export function splitGroups(teamIds: string[], groups: number): Record<string, s
   teamIds.forEach((id, idx) => {
     const row = Math.floor(idx / groups);
     const col = idx % groups;
-    const g = names[row % 2 === 0 ? col : groups - 1 - col];
-    res[g].push(id);
+    const g = names[row % 2 === 0 ? col : groups - 1 - col]!;
+    res[g]!.push(id);
   });
   return res;
 }
