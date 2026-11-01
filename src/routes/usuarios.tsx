@@ -27,7 +27,7 @@ import { fmtDateTime } from "@/lib/tournament";
 import { ADMIN_EMAIL } from "@/lib/usernames";
 
 export const Route = createFileRoute("/usuarios")({
-  head: () => ({ meta: [{ title: "Usuários — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Usuários — Placar Pro"}, {"name": "description", "content": "Administre as contas e os acessos dos organizadores no Placar Pro."}, {"property": "og:title", "content": "Usuários — Placar Pro"}, {"property": "og:description", "content": "Administre as contas e os acessos dos organizadores no Placar Pro."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Usuarios,
 });
 

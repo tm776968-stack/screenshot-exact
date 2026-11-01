@@ -12,7 +12,7 @@ import { mustChangePassword, useSession } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
 
 export const Route = createFileRoute("/entrar")({
-  head: () => ({ meta: [{ title: "Entrar — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Entrar — Placar Pro"}, {"name": "description", "content": "Acesse sua conta de organizador para administrar torneios de vôlei."}, {"property": "og:title", "content": "Entrar — Placar Pro"}, {"property": "og:description", "content": "Acesse sua conta de organizador para administrar torneios de vôlei."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Entrar,
 });
 

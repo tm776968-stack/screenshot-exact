@@ -6,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/auth";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => ({ meta: [{"title": "Placar Pro — Torneios de vôlei ao vivo"}, {"name": "description", "content": "Organize torneios de vôlei de quadra e areia e acompanhe jogos, sets e resultados."}, {"property": "og:title", "content": "Placar Pro — Torneios de vôlei ao vivo"}, {"property": "og:description", "content": "Organize torneios de vôlei de quadra e areia e acompanhe jogos, sets e resultados."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Index,
 });
 

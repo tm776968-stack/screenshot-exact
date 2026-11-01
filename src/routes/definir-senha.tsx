@@ -12,7 +12,7 @@ import { errMsg } from "@/lib/manage";
 import { accountLabel } from "@/lib/usernames";
 
 export const Route = createFileRoute("/definir-senha")({
-  head: () => ({ meta: [{ title: "Definir senha — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Definir senha — Placar Pro"}, {"name": "description", "content": "Defina uma nova senha para sua conta no Placar Pro."}, {"property": "og:title", "content": "Definir senha — Placar Pro"}, {"property": "og:description", "content": "Defina uma nova senha para sua conta no Placar Pro."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: DefinirSenha,
 });
 
@@ -44,7 +44,10 @@ function DefinirSenha() {
             className="mt-6 space-y-4 rounded-xl border bg-card p-5"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (p1 !== p2) return toast.error("As senhas não conferem.");
+              if (p1 !== p2) {
+                toast.error("As senhas não conferem.");
+                return;
+              }
               setBusy(true);
               try {
                 await changeOwnPassword({ data: { password: p1 } });

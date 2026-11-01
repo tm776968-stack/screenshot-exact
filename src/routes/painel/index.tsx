@@ -19,7 +19,7 @@ import { createTournament, errMsg } from "@/lib/manage";
 import { divisionLabel, fmtDate, sportLabel, SPORTS, STATUS_LABEL } from "@/lib/tournament";
 
 export const Route = createFileRoute("/painel/")({
-  head: () => ({ meta: [{ title: "Meus torneios — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Meus torneios — Placar Pro"}, {"name": "description", "content": "Consulte e gerencie seus torneios de vôlei no Placar Pro."}, {"property": "og:title", "content": "Meus torneios — Placar Pro"}, {"property": "og:description", "content": "Consulte e gerencie seus torneios de vôlei no Placar Pro."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Painel,
 });
 

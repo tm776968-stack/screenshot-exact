@@ -46,7 +46,7 @@ export const Route = createFileRoute("/t/$slug")({
       ...(typeof c === "string" && c ? { categoria: c } : {}),
     };
   },
-  head: () => ({ meta: [{ title: "Torneio ao vivo — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Torneio ao vivo — Placar Pro"}, {"name": "description", "content": "Acompanhe placares, próximos jogos e resultados do torneio de vôlei."}, {"property": "og:title", "content": "Torneio ao vivo — Placar Pro"}, {"property": "og:description", "content": "Acompanhe placares, próximos jogos e resultados do torneio de vôlei."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: PublicPage,
 });
 

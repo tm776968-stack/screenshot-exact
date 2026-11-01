@@ -38,7 +38,7 @@ export const Route = createFileRoute("/painel/$id")({
     const v = s["etapa"];
     return typeof v === "string" && ALL_KEYS.includes(v) ? { etapa: v as StepKey } : {};
   },
-  head: () => ({ meta: [{ title: "Gerenciar torneio — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Gerenciar torneio — Placar Pro"}, {"name": "description", "content": "Gerencie equipes, partidas e a publicação do seu torneio de vôlei."}, {"property": "og:title", "content": "Gerenciar torneio — Placar Pro"}, {"property": "og:description", "content": "Gerencie equipes, partidas e a publicação do seu torneio de vôlei."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Manage,
 });
 

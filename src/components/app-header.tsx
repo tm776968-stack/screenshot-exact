@@ -16,7 +16,7 @@ export function Brand() {
   );
 }
 
-export function AppHeader({ children, email }: { children?: ReactNode; email?: string | null }) {
+export function AppHeader({ children, email }: { children?: ReactNode; email?: string | null | undefined }) {
   const navigate = useNavigate();
   return (
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">

@@ -10,9 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DefinirSenhaRouteImport } from './routes/definir-senha'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as UsuariosRouteImport } from './routes/usuarios'
-import { Route as DefinirSenhaRouteImport } from './routes/definir-senha'
 import { Route as PainelIndexRouteImport } from './routes/painel/index'
 import { Route as PainelIdRouteImport } from './routes/painel/$id'
 import { Route as SumulaMatchIdRouteImport } from './routes/sumula/$matchId'
@@ -29,14 +29,14 @@ const DefinirSenhaRoute = DefinirSenhaRouteImport.update({
   path: '/definir-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
-const UsuariosRoute = UsuariosRouteImport.update({
-  id: '/usuarios',
-  path: '/usuarios',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EntrarRoute = EntrarRouteImport.update({
   id: '/entrar',
   path: '/entrar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsuariosRoute = UsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PainelIndexRoute = PainelIndexRouteImport.update({
@@ -66,94 +66,94 @@ const TvSlugRoute = TvSlugRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/entrar': typeof EntrarRoute
-  '/painel/': typeof PainelIndexRoute
+  '/usuarios': typeof UsuariosRoute
   '/painel/$id': typeof PainelIdRoute
   '/sumula/$matchId': typeof SumulaMatchIdRoute
   '/t/$slug': typeof TSlugRoute
   '/tv/$slug': typeof TvSlugRoute
+  '/painel/': typeof PainelIndexRoute
 }
 export interface FileRoutesByTo {
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/entrar': typeof EntrarRoute
-  '/painel': typeof PainelIndexRoute
+  '/usuarios': typeof UsuariosRoute
   '/painel/$id': typeof PainelIdRoute
   '/sumula/$matchId': typeof SumulaMatchIdRoute
   '/t/$slug': typeof TSlugRoute
   '/tv/$slug': typeof TvSlugRoute
+  '/painel': typeof PainelIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/usuarios': typeof UsuariosRoute
-  '/definir-senha': typeof DefinirSenhaRoute
   '/': typeof IndexRoute
+  '/definir-senha': typeof DefinirSenhaRoute
   '/entrar': typeof EntrarRoute
-  '/painel/': typeof PainelIndexRoute
+  '/usuarios': typeof UsuariosRoute
   '/painel/$id': typeof PainelIdRoute
   '/sumula/$matchId': typeof SumulaMatchIdRoute
   '/t/$slug': typeof TSlugRoute
   '/tv/$slug': typeof TvSlugRoute
+  '/painel/': typeof PainelIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/usuarios'
-    | '/definir-senha'
     | '/'
+    | '/definir-senha'
     | '/entrar'
-    | '/painel/'
+    | '/usuarios'
     | '/painel/$id'
     | '/sumula/$matchId'
     | '/t/$slug'
     | '/tv/$slug'
+    | '/painel/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/usuarios'
-    | '/definir-senha'
     | '/'
+    | '/definir-senha'
     | '/entrar'
-    | '/painel'
+    | '/usuarios'
     | '/painel/$id'
     | '/sumula/$matchId'
     | '/t/$slug'
     | '/tv/$slug'
+    | '/painel'
   id:
     | '__root__'
-    | '/usuarios'
-    | '/definir-senha'
     | '/'
+    | '/definir-senha'
     | '/entrar'
-    | '/painel/'
+    | '/usuarios'
     | '/painel/$id'
     | '/sumula/$matchId'
     | '/t/$slug'
     | '/tv/$slug'
+    | '/painel/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  UsuariosRoute: typeof UsuariosRoute
-  DefinirSenhaRoute: typeof DefinirSenhaRoute
   IndexRoute: typeof IndexRoute
+  DefinirSenhaRoute: typeof DefinirSenhaRoute
   EntrarRoute: typeof EntrarRoute
-  PainelIndexRoute: typeof PainelIndexRoute
+  UsuariosRoute: typeof UsuariosRoute
   PainelIdRoute: typeof PainelIdRoute
   SumulaMatchIdRoute: typeof SumulaMatchIdRoute
   TSlugRoute: typeof TSlugRoute
   TvSlugRoute: typeof TvSlugRoute
+  PainelIndexRoute: typeof PainelIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/usuarios': {
-      id: '/usuarios'
-      path: '/usuarios'
-      fullPath: '/usuarios'
-      preLoaderRoute: typeof UsuariosRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/definir-senha': {
@@ -163,13 +163,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/entrar': {
       id: '/entrar'
       path: '/entrar'
@@ -177,9 +170,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/usuarios': {
+      id: '/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof UsuariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/painel/': {
       id: '/painel/'
-      path: '/painel/'
+      path: '/painel'
       fullPath: '/painel/'
       preLoaderRoute: typeof PainelIndexRouteImport
       parentRoute: typeof rootRouteImport
@@ -216,15 +216,15 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  UsuariosRoute: UsuariosRoute,
-  DefinirSenhaRoute: DefinirSenhaRoute,
   IndexRoute: IndexRoute,
+  DefinirSenhaRoute: DefinirSenhaRoute,
   EntrarRoute: EntrarRoute,
-  PainelIndexRoute: PainelIndexRoute,
+  UsuariosRoute: UsuariosRoute,
   PainelIdRoute: PainelIdRoute,
   SumulaMatchIdRoute: SumulaMatchIdRoute,
   TSlugRoute: TSlugRoute,
   TvSlugRoute: TvSlugRoute,
+  PainelIndexRoute: PainelIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
