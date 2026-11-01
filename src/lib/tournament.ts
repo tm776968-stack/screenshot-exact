@@ -273,8 +273,8 @@ export function knockout(teamIds: (string | null)[], thirdPlace = false): NewMat
         stage: stageName(totalRounds - r),
         round: r + 1,
         bracket_pos: i,
-        home_team_id: r === 0 ? slots[i * 2] : null,
-        away_team_id: r === 0 ? slots[i * 2 + 1] : null,
+        home_team_id: r === 0 ? slots[i * 2] ?? null : null,
+        away_team_id: r === 0 ? slots[i * 2 + 1] ?? null : null,
         next_key: r < totalRounds - 1 ? `K-${r + 1}-${Math.floor(i / 2)}` : null,
         next_slot: r < totalRounds - 1 ? (i % 2 === 0 ? "home" : "away") : null,
       });
