@@ -194,7 +194,6 @@ export type Database = {
           period: number
           round: number
           scheduled_at: string | null
-          sets: Json
           stage: string
           status: Database["public"]["Enums"]["match_status"]
           tournament_id: string
@@ -220,7 +219,6 @@ export type Database = {
           period?: number
           round?: number
           scheduled_at?: string | null
-          sets?: Json
           stage?: string
           status?: Database["public"]["Enums"]["match_status"]
           tournament_id: string
@@ -246,7 +244,6 @@ export type Database = {
           period?: number
           round?: number
           scheduled_at?: string | null
-          sets?: Json
           stage?: string
           status?: Database["public"]["Enums"]["match_status"]
           tournament_id?: string
@@ -505,7 +502,6 @@ export type Database = {
       tournaments: {
         Row: {
           banner_url: string | null
-          category: string | null
           created_at: string
           end_date: string | null
           format: string
@@ -513,9 +509,7 @@ export type Database = {
           location: string | null
           logo_url: string | null
           name: string
-          naipe: string | null
           owner_id: string
-          parent_id: string | null
           primary_color: string | null
           published: boolean
           rules: string | null
@@ -527,7 +521,6 @@ export type Database = {
         }
         Insert: {
           banner_url?: string | null
-          category?: string | null
           created_at?: string
           end_date?: string | null
           format?: string
@@ -535,9 +528,7 @@ export type Database = {
           location?: string | null
           logo_url?: string | null
           name: string
-          naipe?: string | null
           owner_id?: string
-          parent_id?: string | null
           primary_color?: string | null
           published?: boolean
           rules?: string | null
@@ -549,7 +540,6 @@ export type Database = {
         }
         Update: {
           banner_url?: string | null
-          category?: string | null
           created_at?: string
           end_date?: string | null
           format?: string
@@ -557,9 +547,7 @@ export type Database = {
           location?: string | null
           logo_url?: string | null
           name?: string
-          naipe?: string | null
           owner_id?: string
-          parent_id?: string | null
           primary_color?: string | null
           published?: boolean
           rules?: string | null
