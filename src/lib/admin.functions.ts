@@ -68,8 +68,46 @@ const LOCKED_MSG = "Conta bloqueada após 5 tentativas erradas. Peça ao adminis
  * password nobody knows; the temporary password is checked here instead (see loginWithLimit)
  * until the administrator chooses a real one.
  */
+type AuthUserLite = { id: string; email?: string; created_at: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> };
+
+async function allAuthUsers(db: Db): Promise<AuthUserLite[]> {
+  const { data, error } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw new Error(error.message);
+  return data.users as AuthUserLite[];
+}
+
+/**
+ * When the database refuses new accounts (old signup guard, fixed by migration 0005), the Admin
+ * login takes over an existing account instead: the owner's e-mail account if there is one,
+ * otherwise another administrator, otherwise the oldest account. Changing an account is allowed;
+ * only creating one is blocked. The account keeps its id, so its tournaments stay with it.
+ */
+async function adoptExistingAccountAsAdmin(db: Db): Promise<{ id: string } | null> {
+  const users = await allAuthUsers(db);
+  if (!users.length) return null;
+  const { data: admins } = await db.from("app_admins").select("email");
+  const adminSet = new Set([...BOOTSTRAP_ADMINS, ...((admins ?? []) as { email: string }[]).map((a) => norm(a.email))]);
+  const pick =
+    users.find((u) => norm(u.email ?? "") === "tm776968@gmail.com") ??
+    users.find((u) => adminSet.has(norm(u.email ?? ""))) ??
+    [...users].sort((a, b) => a.created_at.localeCompare(b.created_at))[0]!;
+  const { error } = await db.auth.admin.updateUserById(pick.id, {
+    email: ADMIN_EMAIL,
+    email_confirm: true,
+    app_metadata: { ...(pick.app_metadata ?? {}), created_by_admin: true, must_change_password: true },
+    user_metadata: { ...(pick.user_metadata ?? {}), username: ADMIN_USERNAME, full_name: (pick.user_metadata?.["full_name"] as string | undefined) || "Administrador" },
+  });
+  if (error) throw new Error(ptAuthError(error.message));
+  await db.from("profiles").update({ email: ADMIN_EMAIL }).eq("id", pick.id);
+  return { id: pick.id };
+}
+
 async function ensureAdminAccount(db: Db): Promise<{ id: string; temporary: boolean }> {
   let found = await findUserByEmail(db, ADMIN_EMAIL);
+  if (!found) {
+    const u = (await allAuthUsers(db)).find((x) => norm(x.email ?? "") === ADMIN_EMAIL);
+    if (u) found = { id: u.id };
+  }
   if (!found) {
     const { data, error } = await db.auth.admin.createUser({
       email: ADMIN_EMAIL,
@@ -78,8 +116,13 @@ async function ensureAdminAccount(db: Db): Promise<{ id: string; temporary: bool
       app_metadata: { created_by_admin: true, must_change_password: true },
       user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME, signup_token: await signupToken(db) },
     });
-    if (error && !/already/i.test(error.message)) throw new Error(ptAuthError(error.message));
-    found = data?.user ? { id: data.user.id as string } : await findUserByEmail(db, ADMIN_EMAIL);
+    if (error && /database error/i.test(error.message)) {
+      found = await adoptExistingAccountAsAdmin(db);
+      if (!found) throw new Error(ptAuthError(error.message));
+    } else {
+      if (error && !/already/i.test(error.message)) throw new Error(ptAuthError(error.message));
+      found = data?.user ? { id: data.user.id as string } : await findUserByEmail(db, ADMIN_EMAIL);
+    }
   }
   await db.from("app_admins").upsert({ email: ADMIN_EMAIL }, { onConflict: "email" });
   if (!found) throw new Error("Não foi possível preparar a conta Admin. Tente de novo.");
