@@ -21,8 +21,9 @@ import { LiveBadge } from "@/components/sport";
 import { Empty } from "@/components/views";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
-import { bundleBySlug, useTournamentRealtime, type Bundle } from "@/lib/data";
+import { bundleById, bundleBySlug, useTournamentRealtime, type Bundle } from "@/lib/data";
 import { themeVars } from "@/lib/images";
+import { divisionLabel } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -37,20 +38,36 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 export const Route = createFileRoute("/t/$slug")({
-  validateSearch: (s: Record<string, unknown>): { aba?: TabKey } => {
+  validateSearch: (s: Record<string, unknown>): { aba?: TabKey; categoria?: string } => {
     const v = s["aba"];
-    return TABS.some((x) => x.key === v) ? { aba: v as TabKey } : {};
+    const c = s["categoria"];
+    return {
+      ...(TABS.some((x) => x.key === v) ? { aba: v as TabKey } : {}),
+      ...(typeof c === "string" && c ? { categoria: c } : {}),
+    };
   },
   head: () => ({ meta: [{ title: "Torneio ao vivo — Placar Pro" }] }),
   component: PublicPage,
 });
 
+/** Category shown: the one in the link, the category the slug points to, or the first one. */
+function pickDivision(base: Bundle, wanted: string | undefined) {
+  if (wanted && base.divisions.some((d) => d.id === wanted)) return wanted;
+  if (base.tournament.parent_id) return base.tournament.id;
+  return base.divisions[0]?.id ?? base.tournament.id;
+}
+
 function PublicPage() {
   const { slug } = Route.useParams();
+  const { categoria } = Route.useSearch();
   const q = useQuery(bundleBySlug(slug));
-  useTournamentRealtime(q.data?.tournament.id);
-  if (q.isLoading) return <PageLoading />;
-  if (!q.data)
+  const selected = q.data ? pickDivision(q.data, categoria) : null;
+  const other = !!q.data && !!selected && selected !== q.data.tournament.id;
+  const dq = useQuery({ ...bundleById(selected ?? ""), enabled: other });
+  const b = other ? dq.data : q.data;
+  useTournamentRealtime(b?.tournament.id);
+  if (q.isLoading || (other && dq.isLoading)) return <PageLoading />;
+  if (!q.data || !b)
     return (
       <div className="min-h-screen">
         <header className="mx-auto max-w-5xl px-4 py-4">
@@ -61,7 +78,7 @@ function PublicPage() {
         </main>
       </div>
     );
-  return <PublicTournament b={q.data} />;
+  return <PublicTournament key={b.tournament.id} b={b} />;
 }
 
 function PublicTournament({ b }: { b: Bundle }) {
@@ -94,11 +111,12 @@ function PublicTournament({ b }: { b: Bundle }) {
     }
   };
 
-  const canEdit = !!user && user.id === b.tournament.owner_id;
+  const canEdit = !!user && (user.id === b.root.owner_id || user.id === b.tournament.owner_id);
+  const noDivisions = !b.tournament.parent_id && b.divisions.length === 0;
   const showFilter = tab === "ao-vivo" || tab === "proximos" || tab === "chaveamento";
 
   return (
-    <div className="min-h-screen pb-12" style={themeVars(b.tournament.primary_color)}>
+    <div className="min-h-screen pb-12" style={themeVars(b.root.primary_color)}>
       <header className="border-b bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-12 max-w-5xl items-center justify-between px-4">
           <Brand />
@@ -111,26 +129,45 @@ function PublicTournament({ b }: { b: Bundle }) {
               </Button>
             )}
             <Button asChild size="sm" variant="ghost">
-              <Link to="/tv/$slug" params={{ slug: b.tournament.slug }}>
+              <Link to="/tv/$slug" params={{ slug: b.root.slug }}>
                 <Tv /> <span className="hidden sm:inline">Modo TV</span>
               </Link>
             </Button>
           </div>
         </div>
       </header>
-      {!b.tournament.published && (
+      {!b.root.published && (
         <div className="bg-warning/15 px-4 py-2 text-center text-xs text-warning">
           Prévia: este torneio ainda não foi publicado e só a organização consegue vê-lo.
         </div>
       )}
       <TournamentHero b={b} />
 
+      {b.divisions.length > 1 && (
+        <div className="border-b bg-card/40">
+          <div className="mx-auto flex max-w-5xl gap-1.5 overflow-x-auto px-4 py-2">
+            {b.divisions.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => navigate({ search: (prev) => ({ ...prev, categoria: d.id }), replace: true })}
+                className={cn(
+                  "shrink-0 rounded-lg border px-3 py-1.5 text-sm font-semibold transition",
+                  d.id === b.tournament.id ? "border-primary bg-primary/15 text-primary" : "bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {divisionLabel(d)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <nav className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 py-2">
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => navigate({ search: { aba: t.key }, replace: true })}
+              onClick={() => navigate({ search: (prev) => ({ ...prev, aba: t.key }), replace: true })}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition",
                 tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
@@ -145,6 +182,7 @@ function PublicTournament({ b }: { b: Bundle }) {
       </nav>
 
       <main className="mx-auto max-w-5xl space-y-4 px-4 py-5">
+        {noDivisions && <Empty>A organização ainda não cadastrou as categorias deste torneio.</Empty>}
         {showFilter && b.teams.length > 0 && (
           <div>
             <div className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">Acompanhar equipe</div>
@@ -190,7 +228,7 @@ function PublicTournament({ b }: { b: Bundle }) {
             b={b}
             onTeam={(id) => {
               setTeamPage(id);
-              navigate({ search: { aba: "equipes" }, replace: true });
+              navigate({ search: (prev) => ({ ...prev, aba: "equipes" }), replace: true });
             }}
           />
         )}

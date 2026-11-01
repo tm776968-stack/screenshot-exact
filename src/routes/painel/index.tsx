@@ -16,7 +16,7 @@ import { amIAdmin } from "@/lib/admin.functions";
 import { useRequireAuth } from "@/lib/auth";
 import type { Tournament } from "@/lib/data";
 import { createTournament, errMsg } from "@/lib/manage";
-import { FORMATS, fmtDate, SPORTS, STATUS_LABEL } from "@/lib/tournament";
+import { divisionLabel, fmtDate, sportLabel, SPORTS, STATUS_LABEL } from "@/lib/tournament";
 
 export const Route = createFileRoute("/painel/")({
   head: () => ({ meta: [{ title: "Meus torneios — Placar Pro" }] }),
@@ -28,17 +28,25 @@ function useMyTournaments(userId: string | undefined, email: string | undefined)
     queryKey: ["my-tournaments", userId],
     enabled: !!userId,
     queryFn: async () => {
-      const own = await supabase.from("tournaments").select("*").eq("owner_id", userId!).order("created_at", { ascending: false });
+      // Categories are listed inside their main tournament, never on their own.
+      const own = await supabase.from("tournaments").select("*").eq("owner_id", userId!).is("parent_id", null).order("created_at", { ascending: false });
       if (own.error) throw own.error;
       const mem = await supabase.from("tournament_members").select("tournament_id").ilike("email", email ?? "");
       const sharedIds = (mem.data ?? []).map((m) => m.tournament_id).filter((id) => !own.data.some((t) => t.id === id));
       let shared: Tournament[] = [];
       if (sharedIds.length) {
-        const r = await supabase.from("tournaments").select("*").in("id", sharedIds);
+        const r = await supabase.from("tournaments").select("*").in("id", sharedIds).is("parent_id", null);
         if (r.error) throw r.error;
         shared = r.data;
       }
-      return { own: own.data, shared };
+      const rootIds = [...own.data, ...shared].map((t) => t.id);
+      const divisions: Record<string, Tournament[]> = {};
+      if (rootIds.length) {
+        const d = await supabase.from("tournaments").select("*").in("parent_id", rootIds).order("created_at");
+        if (d.error) throw d.error;
+        for (const x of d.data) (divisions[x.parent_id!] ??= []).push(x);
+      }
+      return { own: own.data, shared, divisions };
     },
   });
 }
@@ -89,12 +97,12 @@ function Painel() {
               </div>
             </Empty>
           )}
-          {q.data?.own.map((t) => <TournamentRow key={t.id} t={t} />)}
+          {q.data?.own.map((t) => <TournamentRow key={t.id} t={t} divisions={q.data.divisions[t.id] ?? []} />)}
           {!!q.data?.shared.length && (
             <>
               <h2 className="pt-4 text-xl uppercase text-muted-foreground">Como co-organizador</h2>
               {q.data.shared.map((t) => (
-                <TournamentRow key={t.id} t={t} shared />
+                <TournamentRow key={t.id} t={t} divisions={q.data.divisions[t.id] ?? []} shared />
               ))}
             </>
           )}
@@ -105,9 +113,8 @@ function Painel() {
   );
 }
 
-function TournamentRow({ t, shared }: { t: Tournament; shared?: boolean }) {
-  const sport = SPORTS.find((s) => s.value === t.sport)?.label ?? t.sport;
-  const format = FORMATS.find((f) => f.value === t.format)?.label ?? t.format;
+function TournamentRow({ t, divisions, shared }: { t: Tournament; divisions: Tournament[]; shared?: boolean }) {
+  const sport = sportLabel(t.sport);
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
       <Link to="/painel/$id" params={{ id: t.id }} className="flex min-w-0 flex-1 items-center gap-3">
@@ -133,10 +140,19 @@ function TournamentRow({ t, shared }: { t: Tournament; shared?: boolean }) {
             )}
           </div>
           <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {sport} · {format}
+            {sport} · {divisions.length} categoria{divisions.length === 1 ? "" : "s"}
             {t.start_date && ` · ${fmtDate(t.start_date)}`}
             {t.location && ` · ${t.location}`}
           </div>
+          {divisions.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {divisions.map((d) => (
+                <span key={d.id} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">
+                  {divisionLabel(d)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </Link>
       <div className="flex gap-2">
@@ -162,7 +178,7 @@ function TournamentRow({ t, shared }: { t: Tournament; shared?: boolean }) {
 
 function NewTournamentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [name, setName] = useState("");
-  const [sport, setSport] = useState("futebol");
+  const [sport, setSport] = useState<string>("volei_quadra");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -182,7 +198,7 @@ function NewTournamentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               const t = await createTournament(name.trim(), sport);
               qc.invalidateQueries({ queryKey: ["my-tournaments"] });
               onOpenChange(false);
-              navigate({ to: "/painel/$id", params: { id: t.id } });
+              navigate({ to: "/painel/$id", params: { id: t.id }, search: { etapa: "categorias" } });
             } catch (err) {
               toast.error(errMsg(err));
             } finally {
@@ -192,7 +208,7 @@ function NewTournamentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         >
           <div className="space-y-1.5">
             <Label htmlFor="tname">Nome do torneio</Label>
-            <Input id="tname" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Copa da Vila 2026" />
+            <Input id="tname" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Copa Verão de Vôlei 2026" />
           </div>
           <div className="space-y-1.5">
             <Label>Modalidade</Label>
@@ -209,6 +225,7 @@ function NewTournamentDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               </SelectContent>
             </Select>
           </div>
+          <p className="text-xs text-muted-foreground">Depois você cadastra as categorias e naipes (ex.: Sub-17 Feminino, Adulto Masculino).</p>
           <Button type="submit" className="w-full" disabled={busy || !name.trim()}>
             {busy ? "Criando..." : "Criar e continuar"}
           </Button>

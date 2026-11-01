@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { loginWithLimit, sendAdminSetupLink } from "@/lib/admin.functions";
-import { useSession } from "@/lib/auth";
+import { loginWithLimit } from "@/lib/admin.functions";
+import { mustChangePassword, useSession } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
 
 export const Route = createFileRoute("/entrar")({
@@ -17,27 +17,27 @@ export const Route = createFileRoute("/entrar")({
 });
 
 function Entrar() {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; locked: boolean } | null>(null);
-  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
-    if (session) navigate({ to: "/painel" });
-  }, [session, navigate]);
+    if (session) navigate({ to: mustChangePassword(user) ? "/definir-senha" : "/painel" });
+  }, [session, user, navigate]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setNotice(null);
     try {
-      const r = await loginWithLimit({ data: { email, password } });
+      const r = await loginWithLimit({ data: { login, password } });
       if (r.ok) {
         const { error } = await supabase.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token });
         if (error) throw error;
+        if (r.mustChangePassword) navigate({ to: "/definir-senha" });
       } else {
         setNotice({ text: r.message, locked: r.locked });
         setPassword("");
@@ -61,8 +61,16 @@ function Entrar() {
         </p>
         <form onSubmit={submit} className="mt-6 space-y-4 rounded-xl border bg-card p-5">
           <div className="space-y-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <Label htmlFor="login">Nome de usuário</Label>
+            <Input
+              id="login"
+              required
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password">Senha</Label>
@@ -86,54 +94,9 @@ function Entrar() {
           </Button>
         </form>
         <p className="mt-6 text-xs text-muted-foreground">
-          Não tem conta? Só o administrador do sistema pode cadastrar novos usuários. Peça a ele o seu acesso.
+          Não tem conta ou esqueceu a senha? Só o administrador do sistema cadastra usuários e define novas senhas. Fale com ele.
         </p>
-        <div className="mt-4">
-          {setupOpen ? (
-            <AdminSetup initialEmail={email} />
-          ) : (
-            <button type="button" onClick={() => setSetupOpen(true)} className="text-sm text-primary hover:underline">
-              Esqueci a senha / primeiro acesso do administrador
-            </button>
-          )}
-        </div>
       </div>
     </div>
-  );
-}
-
-function AdminSetup({ initialEmail }: { initialEmail: string }) {
-  const [email, setEmail] = useState(initialEmail);
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
-  if (sent)
-    return (
-      <p className="rounded-lg border bg-card p-3 text-sm">
-        Pronto! Se este e-mail tiver acesso, chega em instantes um link para definir a senha. Confira também o spam.
-      </p>
-    );
-  return (
-    <form
-      className="space-y-2 rounded-xl border bg-card p-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        try {
-          const r = await sendAdminSetupLink({ data: { email, redirectTo: `${window.location.origin}/definir-senha` } });
-          if (r.ok) setSent(true);
-          else toast.error(r.message);
-        } catch (err) {
-          toast.error(errMsg(err));
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <Label htmlFor="admin-email">Seu e-mail</Label>
-      <Input id="admin-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
-        Enviar link para definir a senha
-      </Button>
-    </form>
   );
 }

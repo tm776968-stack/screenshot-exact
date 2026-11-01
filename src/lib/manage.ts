@@ -10,6 +10,8 @@ import {
   readSettings,
   roundRobin,
   slugify,
+  volleyDefaults,
+  volleyState,
   type DoubleElimMatch,
   type NewMatch,
   type Settings,
@@ -32,6 +34,7 @@ export async function saveSettings(t: Tournament, patch: Partial<ExtSettings>) {
   return next;
 }
 
+/** Creates the main tournament. Teams and games live in its categories. */
 export async function createTournament(name: string, sport: string) {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) throw new Error("Faça login novamente.");
@@ -45,11 +48,89 @@ export async function createTournament(name: string, sport: string) {
     sport,
     slug,
     owner_id: u.user.id,
-    settings: DEFAULT_SETTINGS as unknown as Json,
+    settings: { ...DEFAULT_SETTINGS, ...volleyDefaults(sport) } as unknown as Json,
   });
   if (error) throw error;
-  await resetEventTypes(id, sport);
   return { id, slug };
+}
+
+export interface DivisionInput {
+  category: string;
+  naipe: string;
+  teamSize: number;
+  bestOf: number;
+  setPoints: number;
+  tieBreakPoints: number;
+}
+
+/** Adds a category/naipe to a main tournament. */
+export async function createDivision(root: Tournament, d: DivisionInput) {
+  const { data: u } = await supabase.auth.getUser();
+  if (!u.user) throw new Error("Faça login novamente.");
+  const id = crypto.randomUUID();
+  const label = [d.category.trim(), d.naipe].filter(Boolean).join(" ");
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    ...volleyDefaults(root.sport, d.teamSize),
+    bestOf: d.bestOf,
+    setPoints: d.setPoints,
+    tieBreakPoints: d.tieBreakPoints,
+  };
+  const { error } = await supabase.from("tournaments").insert({
+    id,
+    parent_id: root.id,
+    name: `${root.name} — ${label}`,
+    category: d.category.trim() || null,
+    naipe: d.naipe || null,
+    sport: root.sport,
+    slug: `${root.slug}-${slugify(label) || "categoria"}-${Math.random().toString(36).slice(2, 5)}`.slice(0, 80),
+    owner_id: u.user.id,
+    status: root.status,
+    settings: settings as unknown as Json,
+  });
+  if (error) throw error;
+  await resetEventTypes(id, root.sport);
+  return { id };
+}
+
+/** Renames a category and updates its team size and set rules. */
+export async function updateDivision(root: Tournament, div: Tournament, d: DivisionInput) {
+  const label = [d.category.trim(), d.naipe].filter(Boolean).join(" ");
+  const { error } = await supabase
+    .from("tournaments")
+    .update({ category: d.category.trim() || null, naipe: d.naipe || null, name: `${root.name} — ${label}` })
+    .eq("id", div.id);
+  if (error) throw error;
+  await saveSettings(div, { teamSize: d.teamSize, bestOf: d.bestOf, setPoints: d.setPoints, tieBreakPoints: d.tieBreakPoints });
+}
+
+/** Recomputes sets and set points of a match from its scoring events, in the order they were registered. */
+export async function syncVolleyScore(b: Bundle, matchId: string) {
+  const m = b.matches.find((x) => x.id === matchId);
+  if (!m) return;
+  const { data: evs, error } = await supabase
+    .from("match_events")
+    .select("team_id, event_type_id, created_at, id")
+    .eq("match_id", matchId)
+    .order("created_at")
+    .order("id");
+  if (error) throw error;
+  const types = new Map(b.eventTypes.map((e) => [e.id, e]));
+  const points: ("home" | "away")[] = [];
+  for (const e of evs ?? []) {
+    const et = types.get(e.event_type_id);
+    if (!et || et.points <= 0 || !e.team_id) continue;
+    let home = e.team_id === m.home_team_id;
+    if (et.score_target === "opponent") home = !home;
+    for (let i = 0; i < et.points; i++) points.push(home ? "home" : "away");
+  }
+  const st = volleyState(points, readSettings(b.tournament.settings));
+  const { error: e2 } = await supabase
+    .from("matches")
+    .update({ home_score: st.setsHome, away_score: st.setsAway, sets: st.sets as unknown as Json, period: st.currentSet })
+    .eq("id", matchId);
+  if (e2) throw e2;
+  return st;
 }
 
 /** Replaces the scout event types with the sport's default set. */
@@ -142,7 +223,10 @@ export async function buildKnockoutFromGroups(b: Bundle) {
   await insertMatches(b, ko, { deleteStages: ["final", "semi", "quartas", "oitavas", "mata", "terceiro"] });
 }
 
-/** Spreads match times from a start date, rotating through the venues. */
+/**
+ * Spreads match times from a start date, rotating through the courts.
+ * Courts are shared by all categories, so a slot already taken by another category is skipped.
+ */
 export async function distributeTimes(b: Bundle, startIso: string, minutes: number, onlyEmpty: boolean) {
   const venues = b.venues.length ? b.venues : [null];
   const ms = [...b.matches]
@@ -150,15 +234,42 @@ export async function distributeTimes(b: Bundle, startIso: string, minutes: numb
     .filter((m) => m.status === "agendado" || m.status === "adiado")
     .filter((m) => !onlyEmpty || !m.scheduled_at)
     .sort((x, y) => x.round - y.round || (x.group_name ?? "").localeCompare(y.group_name ?? "") || (x.bracket_pos ?? 0) - (y.bracket_pos ?? 0));
+  const siblingIds = b.divisions.map((d) => d.id).filter((id) => id !== b.tournament.id);
+  const busy: { venue: string | null; at: number }[] = [];
+  if (siblingIds.length) {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("scheduled_at, venue_id")
+      .in("tournament_id", siblingIds)
+      .not("scheduled_at", "is", null);
+    if (error) throw error;
+    for (const r of data ?? []) busy.push({ venue: r.venue_id, at: new Date(r.scheduled_at!).getTime() });
+  }
+  const step = minutes * 60000;
+  const taken = (venue: string | null, at: number) => busy.some((x) => x.venue === venue && Math.abs(x.at - at) < step);
   let t = new Date(startIso).getTime();
-  for (let i = 0; i < ms.length; i++) {
-    const v = venues[i % venues.length];
+  let v = 0;
+  for (const m of ms) {
+    // Find the next free court/time pair.
+    for (let guard = 0; guard < 5000 && taken(venues[v]?.id ?? null, t); guard++) {
+      v++;
+      if (v >= venues.length) {
+        v = 0;
+        t += step;
+      }
+    }
+    const venue = venues[v] ?? null;
     const { error } = await supabase
       .from("matches")
-      .update({ scheduled_at: new Date(t).toISOString(), venue_id: v?.id ?? null })
-      .eq("id", ms[i]!.id);
+      .update({ scheduled_at: new Date(t).toISOString(), venue_id: venue?.id ?? null })
+      .eq("id", m.id);
     if (error) throw error;
-    if ((i + 1) % venues.length === 0) t += minutes * 60000;
+    busy.push({ venue: venue?.id ?? null, at: t });
+    v++;
+    if (v >= venues.length) {
+      v = 0;
+      t += step;
+    }
   }
 }
 

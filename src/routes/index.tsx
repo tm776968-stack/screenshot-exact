@@ -15,7 +15,7 @@ export const Route = createFileRoute("/")({
 
 const FEATURES = [
   { icon: GitBranch, title: "Chaveamento automático", text: "Mata-mata, pontos corridos, grupos ou dupla eliminação, com sorteio e cabeças de chave." },
-  { icon: Radio, title: "Placar ao vivo", text: "Súmula no celular e placar atualizado na hora para todo mundo, sem recarregar." },
+  { icon: Radio, title: "Placar ao vivo", text: "Súmula no celular, ponto a ponto, com os sets atualizados na hora para todo mundo." },
   { icon: CalendarClock, title: "Próximos jogos", text: "Tabela com horários, locais e contagem regressiva para cada partida." },
   { icon: Tv, title: "Modo telão", text: "Tela cheia alternando placar, próximos jogos e classificação." },
 ];
@@ -40,14 +40,14 @@ function Index() {
       <main className="mx-auto max-w-5xl px-4 pb-16 pt-12 sm:pt-20">
         <div className="max-w-2xl">
           <span className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground">
-            <span className="live-dot" /> Torneios em tempo real
+            <span className="live-dot" /> Vôlei de quadra e de areia em tempo real
           </span>
           <h1 className="mt-4 text-5xl font-extrabold uppercase leading-[0.95] sm:text-7xl">
             Organize. Jogue. <span className="text-primary">Acompanhe ao vivo.</span>
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            Crie seu torneio, gere a tabela em segundos e compartilhe o link. Participantes e torcida acompanham placar,
-            chaveamento e estatísticas sem precisar de login.
+            Crie o torneio com quantas categorias e naipes precisar, gere a tabela em segundos e compartilhe o link.
+            Atletas e torcida acompanham placar, chaveamento e estatísticas sem precisar de login.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg" className="shadow-glow">

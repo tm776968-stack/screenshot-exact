@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { ChevronLeft, Maximize, Minimize } from "lucide-react";
 import { PageLoading } from "@/components/app-header";
 import { isLive, liveNow, results, upcoming } from "@/components/public-view";
-import { Countdown, LiveBadge, MatchClock, TeamCrest } from "@/components/sport";
+import { Countdown, currentSetPoints, LiveBadge, SetsLine, TeamCrest } from "@/components/sport";
 import { Empty } from "@/components/views";
-import { bundleBySlug, teamMap, useTournamentRealtime, type Bundle, type Match } from "@/lib/data";
+import { bundleById, bundleBySlug, teamMap, useTournamentsRealtime, type Bundle, type Match } from "@/lib/data";
 import { themeVars } from "@/lib/images";
 import { publicUrl } from "@/lib/manage";
-import { fmtDateTime, readSettings, STAGE_LABEL, standings } from "@/lib/tournament";
+import { divisionLabel, fmtDateTime, readSettings, STAGE_LABEL, standings } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv/$slug")({
@@ -23,25 +23,45 @@ const ROTATE_MS = 12000;
 function TvPage() {
   const { slug } = Route.useParams();
   const q = useQuery(bundleBySlug(slug));
-  useTournamentRealtime(q.data?.tournament.id);
-  if (q.isLoading) return <PageLoading />;
-  if (!q.data)
+  const base = q.data;
+  // Every category of the main tournament (or the tournament itself when it has none).
+  const ids = base ? (base.divisions.length ? base.divisions.map((d) => d.id) : [base.tournament.id]) : [];
+  const qs = useQueries({ queries: ids.map((id) => ({ ...bundleById(id), enabled: !!base })) });
+  useTournamentsRealtime(ids);
+  if (q.isLoading || qs.some((x) => x.isLoading)) return <PageLoading />;
+  if (!base)
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
         <Empty>Torneio não encontrado ou ainda não publicado.</Empty>
       </main>
     );
-  return <Tv b={q.data} />;
+  const list = qs.map((x) => x.data).filter(Boolean) as Bundle[];
+  return <Tv root={base} list={list} />;
 }
 
-type Slide = "placar" | "proximos" | "classificacao";
+type Slide = { key: string; kind: "placar" | "proximos" | "classificacao"; b?: Bundle };
 
-function Tv({ b }: { b: Bundle }) {
-  const hasTable = b.matches.some((m) => m.stage === "liga" || m.stage === "grupo");
-  const slides: Slide[] = ["placar", "proximos", ...(hasTable ? (["classificacao"] as Slide[]) : [])];
+/** A match together with the category it belongs to. */
+type Item = { b: Bundle; m: Match };
+
+function Tv({ root, list }: { root: Bundle; list: Bundle[] }) {
+  const r = root.root;
+  const many = list.length > 1;
+  const slides: Slide[] = [
+    { key: "placar", kind: "placar" },
+    { key: "proximos", kind: "proximos" },
+    ...list.filter((b) => b.matches.some((m) => m.stage === "liga" || m.stage === "grupo")).map((b) => ({ key: `tab-${b.tournament.id}`, kind: "classificacao" as const, b })),
+  ];
   const [i, setI] = useState(0);
   const [full, setFull] = useState(false);
   const slide = slides[i % slides.length]!;
+  const live: Item[] = list.flatMap((b) => liveNow(b).map((m) => ({ b, m })));
+  const next: Item[] = list
+    .flatMap((b) => upcoming(b).map((m) => ({ b, m })))
+    .sort((x, y) => (x.m.scheduled_at ?? "9999").localeCompare(y.m.scheduled_at ?? "9999"));
+  const last: Item[] = list
+    .flatMap((b) => results(b).map((m) => ({ b, m })))
+    .sort((x, y) => (y.m.scheduled_at ?? "").localeCompare(x.m.scheduled_at ?? ""));
 
   useEffect(() => {
     const t = setInterval(() => setI((x) => x + 1), ROTATE_MS);
@@ -54,13 +74,13 @@ function Tv({ b }: { b: Bundle }) {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background bg-pitch" style={themeVars(b.tournament.primary_color)}>
+    <div className="flex h-screen flex-col overflow-hidden bg-background bg-pitch" style={themeVars(r.primary_color)}>
       <header className="flex items-center gap-4 px-8 py-5">
-        {b.tournament.logo_url && <img src={b.tournament.logo_url} alt="" className="h-14 w-14 rounded-xl object-cover" />}
-        <h1 className="min-w-0 flex-1 truncate text-5xl uppercase">{b.tournament.name}</h1>
+        {r.logo_url && <img src={r.logo_url} alt="" className="h-14 w-14 rounded-xl object-cover" />}
+        <h1 className="min-w-0 flex-1 truncate text-5xl uppercase">{r.name}</h1>
         <div className="flex items-center gap-2 text-muted-foreground">
           {!full && (
-            <Link to="/t/$slug" params={{ slug: b.tournament.slug }} className="rounded-lg p-2 hover:bg-secondary" aria-label="Voltar">
+            <Link to="/t/$slug" params={{ slug: r.slug }} className="rounded-lg p-2 hover:bg-secondary" aria-label="Voltar">
               <ChevronLeft className="h-6 w-6" />
             </Link>
           )}
@@ -74,16 +94,16 @@ function Tv({ b }: { b: Bundle }) {
         </div>
       </header>
 
-      <main key={slide} className="min-h-0 flex-1 px-8 animate-in fade-in duration-700">
-        {slide === "placar" && <LiveSlide b={b} />}
-        {slide === "proximos" && <NextSlide b={b} />}
-        {slide === "classificacao" && <TableSlide b={b} />}
+      <main key={slide.key} className="min-h-0 flex-1 px-8 animate-in fade-in duration-700">
+        {slide.kind === "placar" && <LiveSlide live={live} next={next[0]} last={last[0]} many={many} />}
+        {slide.kind === "proximos" && <NextSlide list={next.slice(0, 6)} many={many} />}
+        {slide.kind === "classificacao" && slide.b && <TableSlide b={slide.b} many={many} />}
       </main>
 
       <footer className="flex items-center gap-4 px-8 py-4">
         <div className="flex flex-1 gap-2">
-          {slides.map((s, j) => (
-            <span key={s} className={cn("h-1.5 flex-1 rounded-full", j === i % slides.length ? "bg-primary" : "bg-secondary")} />
+          {slides.map((x, j) => (
+            <span key={x.key} className={cn("h-1.5 flex-1 rounded-full", j === i % slides.length ? "bg-primary" : "bg-secondary")} />
           ))}
         </div>
         <div className="flex items-center gap-3">
@@ -93,7 +113,7 @@ function Tv({ b }: { b: Bundle }) {
             pelo celular
           </span>
           <div className="rounded-lg bg-white p-1.5">
-            <QRCodeSVG value={publicUrl(b.tournament.slug)} size={72} />
+            <QRCodeSVG value={publicUrl(r.slug)} size={72} />
           </div>
         </div>
       </footer>
@@ -101,12 +121,19 @@ function Tv({ b }: { b: Bundle }) {
   );
 }
 
+/** "Sub-17 · Feminino" in front of the round name when the tournament has several categories. */
+function matchCaption({ b, m }: Item, many: boolean) {
+  const round = m.stage === "grupo" ? `Grupo ${m.group_name}` : m.stage === "liga" ? `Rodada ${m.round}` : STAGE_LABEL[m.stage];
+  return many && b.tournament.parent_id ? `${divisionLabel(b.tournament)} · ${round}` : round;
+}
+
 function SlideTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-6 flex items-center gap-3 text-4xl uppercase text-muted-foreground">{children}</h2>;
 }
 
-function BigMatch({ b, m }: { b: Bundle; m: Match }) {
+function BigMatch({ b, m, many }: { b: Bundle; m: Match; many: boolean }) {
   const teams = teamMap(b.teams);
+  const pts = currentSetPoints(m);
   const h = m.home_team_id ? teams.get(m.home_team_id) : null;
   const a = m.away_team_id ? teams.get(m.away_team_id) : null;
   const live = isLive(m);
@@ -114,7 +141,7 @@ function BigMatch({ b, m }: { b: Bundle; m: Match }) {
   return (
     <div className={cn("rounded-3xl border bg-card/80 p-6", live && "border-live/50")}>
       <div className="mb-4 flex items-center justify-between text-xl text-muted-foreground">
-        <span>{m.stage === "grupo" ? `Grupo ${m.group_name}` : m.stage === "liga" ? `Rodada ${m.round}` : STAGE_LABEL[m.stage]}</span>
+        <span>{matchCaption({ b, m }, many)}</span>
         {venue && <span>{venue.name}</span>}
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
@@ -123,14 +150,19 @@ function BigMatch({ b, m }: { b: Bundle; m: Match }) {
           <span className="w-full truncate text-3xl font-bold">{h?.name ?? "A definir"}</span>
         </div>
         <div className="text-center">
-          <div className="scoreboard text-[9rem]">
-            {m.home_score}
+          <div className="scoreboard text-[9rem] leading-none">
+            {pts?.[0] ?? 0}
             <span className="mx-3 text-muted-foreground">:</span>
-            {m.away_score}
+            {pts?.[1] ?? 0}
           </div>
           <div className="mt-2 flex items-center justify-center gap-3 text-3xl">
             <LiveBadge className="text-base" />
-            <span className="scoreboard">{m.status === "intervalo" ? "Intervalo" : <MatchClock match={m} />}</span>
+            <span className="scoreboard">
+              {m.period}º set · sets {m.home_score}-{m.away_score}
+            </span>
+          </div>
+          <div className="mt-2 flex justify-center">
+            <SetsLine match={m} className="text-xl" />
           </div>
         </div>
         <div className="flex min-w-0 flex-col items-center gap-3 text-center">
@@ -142,15 +174,12 @@ function BigMatch({ b, m }: { b: Bundle; m: Match }) {
   );
 }
 
-function LiveSlide({ b }: { b: Bundle }) {
-  const live = liveNow(b);
+function LiveSlide({ live, next, last, many }: { live: Item[]; next: Item | undefined; last: Item | undefined; many: boolean }) {
   if (!live.length) {
-    const next = upcoming(b)[0];
-    const last = results(b)[0];
     return (
       <div className="flex h-full flex-col justify-center">
         <SlideTitle>{next ? "Próximo jogo" : "Último resultado"}</SlideTitle>
-        {next ? <NextRow b={b} m={next} big /> : last ? <ResultRow b={b} m={last} /> : <Empty>Nenhum jogo ainda.</Empty>}
+        {next ? <NextRow b={next.b} m={next.m} many={many} big /> : last ? <ResultRow b={last.b} m={last.m} /> : <Empty>Nenhum jogo ainda.</Empty>}
       </div>
     );
   }
@@ -160,15 +189,15 @@ function LiveSlide({ b }: { b: Bundle }) {
         Ao vivo agora <LiveBadge className="text-base" />
       </SlideTitle>
       <div className={cn("grid flex-1 content-start gap-6", live.length > 1 && "lg:grid-cols-2")}>
-        {live.slice(0, 4).map((m) => (
-          <BigMatch key={m.id} b={b} m={m} />
+        {live.slice(0, 4).map(({ b, m }) => (
+          <BigMatch key={m.id} b={b} m={m} many={many} />
         ))}
       </div>
     </div>
   );
 }
 
-function NextRow({ b, m, big }: { b: Bundle; m: Match; big?: boolean }) {
+function NextRow({ b, m, big, many }: { b: Bundle; m: Match; big?: boolean; many: boolean }) {
   const teams = teamMap(b.teams);
   const h = m.home_team_id ? teams.get(m.home_team_id) : null;
   const a = m.away_team_id ? teams.get(m.away_team_id) : null;
@@ -183,6 +212,7 @@ function NextRow({ b, m, big }: { b: Bundle; m: Match; big?: boolean }) {
         <TeamCrest team={a} size={big ? 72 : 44} /> <span className="truncate">{a?.name ?? "A definir"}</span>
       </span>
       <span className="text-right text-lg text-muted-foreground">
+        {many && b.tournament.parent_id && <span className="block font-semibold text-foreground">{divisionLabel(b.tournament)}</span>}
         {fmtDateTime(m.scheduled_at)}
         {venue && <span className="block">{venue.name}</span>}
         {m.scheduled_at && new Date(m.scheduled_at).getTime() > Date.now() && (
@@ -214,22 +244,21 @@ function ResultRow({ b, m }: { b: Bundle; m: Match }) {
   );
 }
 
-function NextSlide({ b }: { b: Bundle }) {
-  const list = upcoming(b).slice(0, 6);
+function NextSlide({ list, many }: { list: Item[]; many: boolean }) {
   return (
     <div className="flex h-full flex-col">
       <SlideTitle>Próximos jogos</SlideTitle>
       {list.length === 0 && <Empty>Nenhum jogo agendado.</Empty>}
       <div className="space-y-3">
-        {list.map((m) => (
-          <NextRow key={m.id} b={b} m={m} />
+        {list.map(({ b, m }) => (
+          <NextRow key={m.id} b={b} m={m} many={many} />
         ))}
       </div>
     </div>
   );
 }
 
-function TableSlide({ b }: { b: Bundle }) {
+function TableSlide({ b, many }: { b: Bundle; many: boolean }) {
   const s = readSettings(b.tournament.settings);
   const teams = teamMap(b.teams);
   const ms = b.matches.filter((m) => m.stage === "liga" || m.stage === "grupo");
@@ -237,7 +266,7 @@ function TableSlide({ b }: { b: Bundle }) {
   const qualifiers = b.tournament.format === "grupos_mata_mata" ? s.qualifiersPerGroup : 0;
   return (
     <div className="flex h-full flex-col">
-      <SlideTitle>Classificação</SlideTitle>
+      <SlideTitle>Classificação{many && b.tournament.parent_id ? ` · ${divisionLabel(b.tournament)}` : ""}</SlideTitle>
       <div className={cn("grid content-start gap-6", groups.length > 1 && "lg:grid-cols-2")}>
         {groups.slice(0, 4).map((g) => {
           const gm = ms.filter((m) => (m.group_name ?? "") === g);
@@ -254,7 +283,7 @@ function TableSlide({ b }: { b: Bundle }) {
                     <th>P</th>
                     <th>J</th>
                     <th>V</th>
-                    <th>SG</th>
+                    <th>SS</th>
                   </tr>
                 </thead>
                 <tbody>

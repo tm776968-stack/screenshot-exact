@@ -26,14 +26,22 @@ export function useSession() {
   return { session, user: session?.user ?? null, loading };
 }
 
-/** Redirects to /entrar when there is no logged-in organizer. */
+/** True while the account still uses a temporary password that must be replaced. */
+export function mustChangePassword(user: Session["user"] | null | undefined) {
+  return !!user?.app_metadata?.["must_change_password"];
+}
+
+/** Redirects to /entrar when there is no logged-in organizer, and to /definir-senha while the password is temporary. */
 export function useRequireAuth() {
   const s = useSession();
   const navigate = useNavigate();
+  const mustChange = mustChangePassword(s.user);
   useEffect(() => {
-    if (!s.loading && !s.session) navigate({ to: "/entrar" });
-  }, [s.loading, s.session, navigate]);
-  return s;
+    if (s.loading) return;
+    if (!s.session) navigate({ to: "/entrar" });
+    else if (mustChange) navigate({ to: "/definir-senha" });
+  }, [s.loading, s.session, mustChange, navigate]);
+  return mustChange ? { ...s, user: null, loading: true } : s;
 }
 
 export async function signOut() {

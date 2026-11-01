@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ADMIN_EMAIL, ADMIN_TEMP_PASSWORD, ADMIN_USERNAME, emailToUsername, loginToEmail, normalizeUsername, usernameToEmail } from "@/lib/usernames";
 
 /**
  * Server functions for login limits and user administration.
@@ -7,6 +8,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 
 export const MAX_LOGIN_ATTEMPTS = 5;
+/** The administrator is never locked out for good: after this long the lock lifts on its own. */
+const ADMIN_LOCK_MINUTES = 30;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
@@ -36,8 +39,8 @@ async function publicAuthClient() {
 
 const norm = (e: string) => e.trim().toLowerCase();
 
-/** Built-in administrator, valid even before the app_admins table exists. */
-const BOOTSTRAP_ADMINS = ["tm776968@gmail.com"];
+/** Built-in administrators, valid even before the app_admins table exists. */
+const BOOTSTRAP_ADMINS = [ADMIN_EMAIL, "tm776968@gmail.com"];
 
 async function isAdminEmail(db: Db, email: string | undefined) {
   if (!email) return false;
@@ -54,86 +57,84 @@ async function findUserByEmail(db: Db, email: string) {
 /* ---------------- login with attempt limit ---------------- */
 
 export type LoginResult =
-  | { ok: true; access_token: string; refresh_token: string }
+  | { ok: true; access_token: string; refresh_token: string; mustChangePassword: boolean }
   | { ok: false; locked: boolean; remaining: number; message: string };
 
+const LOCKED_MSG = "Conta bloqueada após 5 tentativas erradas. Peça ao administrador para desbloquear.";
+
+/** Creates the "Admin" account with the temporary password the first time someone signs in as Admin. */
+async function ensureAdminAccount(db: Db) {
+  if (await findUserByEmail(db, ADMIN_EMAIL)) return;
+  const { error } = await db.auth.admin.createUser({
+    email: ADMIN_EMAIL,
+    password: ADMIN_TEMP_PASSWORD,
+    email_confirm: true,
+    app_metadata: { created_by_admin: true, must_change_password: true },
+    user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME },
+  });
+  if (error && !/already/i.test(error.message)) throw new Error(error.message);
+  await db.from("app_admins").upsert({ email: ADMIN_EMAIL }, { onConflict: "email" });
+}
+
 export const loginWithLimit = createServerFn({ method: "POST" })
-  .inputValidator((d: { email: string; password: string }) => ({ email: norm(String(d.email ?? "")), password: String(d.password ?? "") }))
+  .inputValidator((d: { login: string; password: string }) => ({ login: String(d.login ?? ""), password: String(d.password ?? "") }))
   .handler(async ({ data }): Promise<LoginResult> => {
+    const email = loginToEmail(data.login);
+    if (!email) return { ok: false, locked: false, remaining: MAX_LOGIN_ATTEMPTS, message: "Usuário inválido. Use letras, números, ponto, hífen ou sublinhado." };
     const db = await adminDb();
-    const { data: row } = await db.from("login_attempts").select("*").eq("email", data.email).maybeSingle();
-    if (row?.locked) {
-      return {
-        ok: false,
-        locked: true,
-        remaining: 0,
-        message: "Conta bloqueada após 5 tentativas erradas. Peça ao administrador para desbloquear.",
-      };
+    if (email === ADMIN_EMAIL) await ensureAdminAccount(db);
+
+    let { data: row } = await db.from("login_attempts").select("*").eq("email", email).maybeSingle();
+    if (row?.locked && (await isAdminEmail(db, email))) {
+      const since = Date.now() - new Date(row.last_attempt_at).getTime();
+      if (since > ADMIN_LOCK_MINUTES * 60000) {
+        await db.from("login_attempts").delete().eq("email", email);
+        row = null;
+      }
     }
+    if (row?.locked) return { ok: false, locked: true, remaining: 0, message: LOCKED_MSG };
+
     const auth = await publicAuthClient();
-    const { data: res, error } = await auth.auth.signInWithPassword({ email: data.email, password: data.password });
+    const { data: res, error } = await auth.auth.signInWithPassword({ email, password: data.password });
     if (!error && res.session) {
-      await db.from("login_attempts").delete().eq("email", data.email);
-      return { ok: true, access_token: res.session.access_token, refresh_token: res.session.refresh_token };
+      await db.from("login_attempts").delete().eq("email", email);
+      return {
+        ok: true,
+        access_token: res.session.access_token,
+        refresh_token: res.session.refresh_token,
+        mustChangePassword: !!res.user?.app_metadata?.["must_change_password"],
+      };
     }
     const failed = (row?.failed ?? 0) + 1;
     const locked = failed >= MAX_LOGIN_ATTEMPTS;
-    await db
-      .from("login_attempts")
-      .upsert({ email: data.email, failed, locked, last_attempt_at: new Date().toISOString() }, { onConflict: "email" });
+    await db.from("login_attempts").upsert({ email, failed, locked, last_attempt_at: new Date().toISOString() }, { onConflict: "email" });
     const remaining = Math.max(0, MAX_LOGIN_ATTEMPTS - failed);
     return {
       ok: false,
       locked,
       remaining,
-      message: locked
-        ? "Conta bloqueada após 5 tentativas erradas. Peça ao administrador para desbloquear."
-        : `E-mail ou senha incorretos. Restam ${remaining} tentativa${remaining === 1 ? "" : "s"}.`,
+      message: locked ? LOCKED_MSG : `Usuário ou senha incorretos. Restam ${remaining} tentativa${remaining === 1 ? "" : "s"}.`,
     };
   });
 
-/* ---------------- first access of the administrator ---------------- */
+/* ---------------- temporary password ---------------- */
 
-/** True when an administrator e-mail still has no account. */
-export const adminSetupStatus = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await adminDb();
-  const { data } = await db.from("app_admins").select("email");
-  for (const a of (data ?? []) as { email: string }[]) {
-    if (!(await findUserByEmail(db, a.email))) return { needsSetup: true };
-  }
-  return { needsSetup: false };
-});
-
-/**
- * Creates the administrator account (if it doesn't exist yet) and e-mails a link to set the password.
- * Only works for e-mails listed in app_admins, so it can only ever send mail to the administrator.
- */
-export const sendAdminSetupLink = createServerFn({ method: "POST" })
-  .inputValidator((d: { email: string; redirectTo: string }) => ({ email: norm(String(d.email ?? "")), redirectTo: String(d.redirectTo ?? "") }))
-  .handler(async ({ data }) => {
-    const generic = {
-      ok: true,
-      message: "Se este e-mail tiver acesso ao sistema, você vai receber um link para definir a senha. Confira também o spam.",
-    };
-    if (!data.email.includes("@")) return { ok: false, message: "Informe um e-mail válido." };
+/** Saves the user's new password and clears the "change on next sign-in" flag. */
+export const changeOwnPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { password: string }) => ({ password: String(d.password ?? "") }))
+  .handler(async ({ data, context }) => {
+    if (data.password.length < 6) throw new Error("A senha precisa ter pelo menos 6 caracteres.");
+    if (data.password === ADMIN_TEMP_PASSWORD) throw new Error("Escolha uma senha diferente da senha temporária.");
     const db = await adminDb();
-    // The administrator's account is created on first access; everyone else must be created by the administrator.
-    if (!(await findUserByEmail(db, data.email))) {
-      if (!(await isAdminEmail(db, data.email))) return generic;
-      const tmp = crypto.randomUUID() + crypto.randomUUID();
-      const { error } = await db.auth.admin.createUser({
-        email: data.email,
-        password: tmp,
-        email_confirm: true,
-        app_metadata: { created_by_admin: true },
-        user_metadata: { full_name: "Administrador" },
-      });
-      if (error && !/already/i.test(error.message)) return { ok: false, message: error.message };
-    }
-    const auth = await publicAuthClient();
-    const { error } = await auth.auth.resetPasswordForEmail(data.email, { redirectTo: data.redirectTo });
-    if (error) return { ok: false, message: error.message };
-    return generic;
+    const { data: u, error: e1 } = await db.auth.admin.getUserById(context.userId);
+    if (e1) throw new Error(e1.message);
+    const { error } = await db.auth.admin.updateUserById(context.userId, {
+      password: data.password,
+      app_metadata: { ...(u.user?.app_metadata ?? {}), must_change_password: false },
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 /* ---------------- user administration (admin only) ---------------- */
@@ -147,6 +148,8 @@ async function requireAdmin(claims: Record<string, unknown>) {
 export interface AdminUser {
   id: string;
   email: string;
+  /** Login name, or null for accounts that sign in with an e-mail. */
+  username: string | null;
   name: string | null;
   created_at: string;
   last_sign_in_at: string | null;
@@ -178,6 +181,7 @@ export const listUsers = createServerFn({ method: "GET" })
         return {
           id: u.id,
           email,
+          username: emailToUsername(email),
           name: (u.user_metadata?.["full_name"] as string | undefined) ?? null,
           created_at: u.created_at,
           last_sign_in_at: u.last_sign_in_at ?? null,
@@ -186,30 +190,32 @@ export const listUsers = createServerFn({ method: "GET" })
           failed: a?.failed ?? 0,
         };
       })
-      .sort((x, y) => Number(y.is_admin) - Number(x.is_admin) || x.email.localeCompare(y.email));
+      .sort((x, y) => Number(y.is_admin) - Number(x.is_admin) || (x.username ?? x.email).localeCompare(y.username ?? y.email));
   });
 
 export const createUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { email: string; name: string; password: string; admin: boolean }) => ({
-    email: norm(String(d.email ?? "")),
+  .inputValidator((d: { username: string; name: string; password: string; admin: boolean }) => ({
+    username: String(d.username ?? ""),
     name: String(d.name ?? "").trim(),
     password: String(d.password ?? ""),
     admin: !!d.admin,
   }))
   .handler(async ({ data, context }) => {
     const db = await requireAdmin(context.claims as Record<string, unknown>);
-    if (!data.email.includes("@")) throw new Error("Informe um e-mail válido.");
+    const username = normalizeUsername(data.username);
+    if (!username) throw new Error("Nome de usuário inválido. Use de 2 a 31 letras, números, ponto, hífen ou sublinhado, sem espaços.");
     if (data.password.length < 6) throw new Error("A senha precisa ter pelo menos 6 caracteres.");
+    const email = usernameToEmail(username);
     const { error } = await db.auth.admin.createUser({
-      email: data.email,
+      email,
       password: data.password,
       email_confirm: true,
       app_metadata: { created_by_admin: true },
-      user_metadata: { full_name: data.name || data.email.split("@")[0] },
+      user_metadata: { full_name: data.name || username, username },
     });
-    if (error) throw new Error(/already/i.test(error.message) ? "Já existe uma conta com este e-mail." : error.message);
-    if (data.admin) await db.from("app_admins").upsert({ email: data.email }, { onConflict: "email" });
+    if (error) throw new Error(/already/i.test(error.message) ? "Já existe uma conta com este nome de usuário." : error.message);
+    if (data.admin) await db.from("app_admins").upsert({ email }, { onConflict: "email" });
     return { ok: true };
   });
 
@@ -244,6 +250,7 @@ export const setUserAdmin = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = await requireAdmin(context.claims as Record<string, unknown>);
     if (!data.admin && data.email === norm(String(context.claims["email"] ?? ""))) throw new Error("Você não pode remover seu próprio acesso de administrador.");
+    if (!data.admin && data.email === ADMIN_EMAIL) throw new Error("A conta Admin é sempre administradora.");
     if (data.admin) await db.from("app_admins").upsert({ email: data.email }, { onConflict: "email" });
     else await db.from("app_admins").delete().eq("email", data.email);
     return { ok: true };
@@ -255,6 +262,7 @@ export const deleteUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const db = await requireAdmin(context.claims as Record<string, unknown>);
     if (data.id === context.userId) throw new Error("Você não pode excluir a própria conta.");
+    if (data.email === ADMIN_EMAIL) throw new Error("A conta Admin não pode ser excluída.");
     const { error } = await db.auth.admin.deleteUser(data.id);
     if (error) throw new Error(error.message);
     await Promise.all([db.from("login_attempts").delete().eq("email", data.email), db.from("app_admins").delete().eq("email", data.email)]);

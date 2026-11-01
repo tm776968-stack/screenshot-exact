@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import type { Bundle } from "@/lib/data";
 import { dominantColor } from "@/lib/images";
-import { SPORTS, STATUS_LABEL } from "@/lib/tournament";
+import { divisionLabel, SPORTS, STATUS_LABEL } from "@/lib/tournament";
 import { Field, ImagePicker, Section, useAction } from "./shared";
 
 export function StepDados({ b }: { b: Bundle }) {
@@ -58,6 +58,15 @@ export function StepDados({ b }: { b: Bundle }) {
             })
             .eq("id", t.id);
           if (error) throw error;
+          // Categories follow the main tournament's modality, status and name.
+          const name = f.name.trim() || t.name;
+          for (const d of b.divisions) {
+            const { error: e2 } = await supabase
+              .from("tournaments")
+              .update({ sport: f.sport, status: f.status, name: `${name} — ${divisionLabel(d).replace(" · ", " ")}` })
+              .eq("id", d.id);
+            if (e2) throw e2;
+          }
         }, "Dados salvos.");
       }}
     >
@@ -66,7 +75,7 @@ export function StepDados({ b }: { b: Bundle }) {
           <Field label="Nome" className="sm:col-span-2">
             <Input value={f.name} onChange={(e) => set("name", e.target.value)} required />
           </Field>
-          <Field label="Modalidade" hint="Para trocar os eventos do scout, use 'Restaurar padrão' na etapa Formato e regras.">
+          <Field label="Modalidade" hint="Vale para todas as categorias do torneio.">
             <Select value={f.sport} onValueChange={(v) => set("sport", v)}>
               <SelectTrigger>
                 <SelectValue />

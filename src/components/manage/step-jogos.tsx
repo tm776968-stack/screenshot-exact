@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CalendarClock, ClipboardList, GitBranch, WandSparkles } from "lucide-react";
-import { LiveBadge, TeamCrest } from "@/components/sport";
+import { LiveBadge, SetsLine, TeamCrest } from "@/components/sport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -163,6 +163,7 @@ function MatchRow({ b, m, teams }: { b: Bundle; m: Match; teams: ReturnType<type
               )}
             </div>
           ))}
+          {(live || done) && <SetsLine match={m} className="text-[11px]" />}
         </div>
         {h && a && (
           <Button asChild size="sm" variant={live ? "default" : "secondary"}>

@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { useSession } from "@/lib/auth";
+import { changeOwnPassword } from "@/lib/admin.functions";
+import { mustChangePassword, useSession } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
+import { accountLabel } from "@/lib/usernames";
 
 export const Route = createFileRoute("/definir-senha")({
   head: () => ({ meta: [{ title: "Definir senha — Placar Pro" }] }),
@@ -21,20 +23,21 @@ function DefinirSenha() {
   const [p2, setP2] = useState("");
   const [busy, setBusy] = useState(false);
   if (loading) return <PageLoading />;
+  const temporary = mustChangePassword(session?.user);
   return (
     <div className="flex min-h-screen flex-col bg-pitch px-4">
       <div className="mx-auto w-full max-w-sm pt-6">
         <Brand />
       </div>
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center pb-16">
-        <h1 className="text-4xl uppercase">Definir senha</h1>
+        <h1 className="text-4xl uppercase">{temporary ? "Crie sua senha" : "Trocar senha"}</h1>
         {!session ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            O link expirou ou já foi usado. Volte para{" "}
+            Sua sessão expirou.{" "}
             <Link to="/entrar" className="text-primary hover:underline">
-              Entrar
-            </Link>{" "}
-            e peça um novo.
+              Entre de novo
+            </Link>
+            .
           </p>
         ) : (
           <form
@@ -44,9 +47,10 @@ function DefinirSenha() {
               if (p1 !== p2) return toast.error("As senhas não conferem.");
               setBusy(true);
               try {
-                const { error } = await supabase.auth.updateUser({ password: p1 });
-                if (error) throw error;
-                toast.success("Senha definida!");
+                await changeOwnPassword({ data: { password: p1 } });
+                // Pick up the cleared flag in a fresh token.
+                await supabase.auth.refreshSession();
+                toast.success("Senha salva!");
                 navigate({ to: "/painel" });
               } catch (err) {
                 toast.error(errMsg(err));
@@ -55,7 +59,14 @@ function DefinirSenha() {
               }
             }}
           >
-            <p className="text-sm text-muted-foreground">Conta: {session.user.email}</p>
+            {temporary && (
+              <p className="rounded-lg bg-warning/15 p-3 text-sm text-warning">
+                Você entrou com uma senha temporária. Defina uma senha nova para continuar.
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Usuário: <b className="text-foreground">{accountLabel(session.user.email, session.user.user_metadata?.["username"])}</b>
+            </p>
             <div className="space-y-1.5">
               <Label htmlFor="p1">Nova senha</Label>
               <Input id="p1" type="password" minLength={6} required value={p1} onChange={(e) => setP1(e.target.value)} autoComplete="new-password" />

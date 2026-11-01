@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Match, Team, Venue } from "@/lib/data";
-import { clockSeconds, fmtClock, fmtDateTime, MATCH_STATUS_LABEL, STAGE_LABEL } from "@/lib/tournament";
+import { clockSeconds, fmtClock, fmtDateTime, MATCH_STATUS_LABEL, readSets, STAGE_LABEL } from "@/lib/tournament";
 
 export function LiveBadge({ className }: { className?: string }) {
   return (
@@ -49,6 +49,34 @@ export function Countdown({ to }: { to: string }) {
   return <span className="tabular-nums">{d > 0 ? `${d}d ${h}h ${m}min` : `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`}</span>;
 }
 
+/** Points of each set; the set being played is highlighted while the match is live. */
+export function SetsLine({ match, className }: { match: Match; className?: string }) {
+  const sets = readSets(match.sets);
+  const live = match.status === "ao_vivo" || match.status === "intervalo";
+  const shown = sets.filter((x, i) => i < sets.length - 1 || x.h + x.a > 0 || live);
+  if (!shown.length) return null;
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1.5 tabular-nums", className)}>
+      {shown.map((x, i) => {
+        const current = live && i === sets.length - 1;
+        return (
+          <span key={i} className={cn("rounded px-1.5 py-0.5", current ? "bg-live/15 font-bold text-live" : "bg-secondary")}>
+            {x.h}-{x.a}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Points of the set being played: [home, away], or null when not live. */
+export function currentSetPoints(match: Match): [number, number] | null {
+  if (match.status !== "ao_vivo" && match.status !== "intervalo") return null;
+  const sets = readSets(match.sets);
+  const cur = sets[sets.length - 1];
+  return cur ? [cur.h, cur.a] : [0, 0];
+}
+
 export function MatchCard({
   match,
   teams,
@@ -84,7 +112,7 @@ export function MatchCard({
           <span className="flex items-center gap-2">
             <LiveBadge />
             <span className="font-display text-sm text-foreground">
-              {match.status === "intervalo" ? "Intervalo" : <><MatchClock match={match} /> · {match.period}º</>}
+              {match.status === "intervalo" ? "Intervalo" : `${match.period}º set`}
             </span>
           </span>
         ) : (
@@ -108,6 +136,7 @@ export function MatchCard({
           )}
         </div>
       ))}
+      {(live || done) && <SetsLine match={match} className="mt-2 text-xs" />}
       {venue && <div className="mt-2 text-xs text-muted-foreground">📍 {venue.name}</div>}
     </button>
   );

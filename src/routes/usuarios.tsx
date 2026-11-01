@@ -24,6 +24,7 @@ import {
 import { useRequireAuth } from "@/lib/auth";
 import { errMsg } from "@/lib/manage";
 import { fmtDateTime } from "@/lib/tournament";
+import { ADMIN_EMAIL } from "@/lib/usernames";
 
 export const Route = createFileRoute("/usuarios")({
   head: () => ({ meta: [{ title: "Usuários — Placar Pro" }] }),
@@ -70,7 +71,7 @@ function Usuarios() {
             <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h1 className="text-4xl uppercase">Usuários</h1>
-                <p className="text-sm text-muted-foreground">Só o administrador cadastra contas. Após 5 senhas erradas a conta fica bloqueada até ser liberada aqui.</p>
+                <p className="text-sm text-muted-foreground">Só o administrador cadastra contas. Após 5 senhas erradas a conta fica bloqueada até ser liberada aqui. A conta Admin desbloqueia sozinha depois de 30 minutos.</p>
               </div>
               <Button onClick={() => setCreating(true)}>
                 <UserPlus /> Novo usuário
@@ -83,7 +84,7 @@ function Usuarios() {
                 <div key={u.id} className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-semibold">{u.name || u.email}</span>
+                      <span className="truncate font-semibold">{u.username ?? u.email}</span>
                       {u.is_admin && (
                         <Badge>
                           <Shield className="mr-1 h-3 w-3" /> Admin
@@ -98,7 +99,7 @@ function Usuarios() {
                       )}
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {u.email} · último acesso: {u.last_sign_in_at ? fmtDateTime(u.last_sign_in_at) : "nunca"}
+                      {u.name && u.name !== u.username ? `${u.name} · ` : ""}último acesso: {u.last_sign_in_at ? fmtDateTime(u.last_sign_in_at) : "nunca"}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -110,7 +111,7 @@ function Usuarios() {
                     <Button size="sm" variant="secondary" onClick={() => setPwFor(u)}>
                       <KeyRound /> Senha
                     </Button>
-                    {u.id !== user.id && (
+                    {u.id !== user.id && u.email !== ADMIN_EMAIL && (
                       <>
                         <Button
                           size="sm"
@@ -127,9 +128,9 @@ function Usuarios() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          aria-label={`Excluir ${u.email}`}
+                          aria-label={`Excluir ${u.username ?? u.email}`}
                           onClick={() => {
-                            if (!confirm(`Excluir a conta ${u.email}? Os torneios criados por ela continuam no banco, mas ficam sem dono.`)) return;
+                            if (!confirm(`Excluir a conta ${u.username ?? u.email}? Os torneios criados por ela continuam no banco, mas ficam sem dono.`)) return;
                             act(() => deleteUser({ data: { id: u.id, email: u.email } }), "Conta excluída.");
                           }}
                         >
@@ -151,7 +152,7 @@ function Usuarios() {
 }
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: "", email: "", password: "", admin: false });
+  const [f, setF] = useState({ name: "", username: "", password: "", admin: false });
   const [busy, setBusy] = useState(false);
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -166,7 +167,7 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
             setBusy(true);
             try {
               await createUser({ data: f });
-              toast.success(`Conta criada. Passe o e-mail e a senha para ${f.name || f.email}.`);
+              toast.success(`Conta criada. Passe o usuário "${f.username.trim().toLowerCase()}" e a senha para ${f.name || "a pessoa"}.`);
               onDone();
               onClose();
             } catch (err) {
@@ -181,8 +182,19 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
             <Input id="u-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="u-email">E-mail</Label>
-            <Input id="u-email" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+            <Label htmlFor="u-username">Nome de usuário</Label>
+            <Input
+              id="u-username"
+              required
+              pattern="[A-Za-z0-9][A-Za-z0-9._\-]{1,30}"
+              title="De 2 a 31 letras, números, ponto, hífen ou sublinhado, sem espaços"
+              value={f.username}
+              onChange={(e) => setF({ ...f, username: e.target.value })}
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="Ex.: joao.silva"
+            />
+            <p className="text-xs text-muted-foreground">É o que a pessoa digita para entrar. Sem espaços nem acentos.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="u-pass">Senha inicial</Label>
@@ -227,7 +239,7 @@ function PasswordDialog({ u, onClose, onDone }: { u: AdminUser; onClose: () => v
             }
           }}
         >
-          <p className="text-sm text-muted-foreground">{u.email}</p>
+          <p className="text-sm text-muted-foreground">{u.username ?? u.email}</p>
           <Input type="text" minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
           <Button type="submit" className="w-full" disabled={busy}>
             Salvar

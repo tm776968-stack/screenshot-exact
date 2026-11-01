@@ -15,6 +15,13 @@
       "when": 1792870000000,
       "tag": "0001_admin_login",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793570000000,
+      "tag": "0002_volei_categorias",
+      "breakpoints": true
     }
   ]
 }

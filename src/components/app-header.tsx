@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Trophy } from "lucide-react";
+import { KeyRound, LogOut, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth";
+import { accountLabel } from "@/lib/usernames";
 
 export function Brand() {
   return (
@@ -23,7 +24,14 @@ export function AppHeader({ children, email }: { children?: ReactNode; email?: s
         <Brand />
         <div className="flex flex-1 items-center justify-end gap-2">
           {children}
-          {email && <span className="hidden truncate text-xs text-muted-foreground sm:inline">{email}</span>}
+          {email && <span className="hidden truncate text-xs text-muted-foreground sm:inline">{accountLabel(email)}</span>}
+          {email && (
+            <Button asChild variant="ghost" size="icon" aria-label="Trocar senha">
+              <Link to="/definir-senha">
+                <KeyRound />
+              </Link>
+            </Button>
+          )}
           {email && (
             <Button
               variant="ghost"

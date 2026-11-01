@@ -103,7 +103,7 @@ export function StandingsView({ b }: { b: Bundle }) {
                   <tr className="[&>th]:px-2 [&>th]:py-2">
                     <th className="w-8 text-left">#</th>
                     <th className="text-left">Equipe</th>
-                    <th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th>
+                    <th>P</th><th>J</th><th>V</th><th>D</th><th title="Sets vencidos">SV</th><th title="Sets perdidos">SP</th><th title="Saldo de sets">SS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -116,7 +116,7 @@ export function StandingsView({ b }: { b: Bundle }) {
                           <span className="truncate font-semibold">{teams.get(r.team_id)?.name}</span>
                         </span>
                       </td>
-                      <td className="font-bold">{r.points}</td><td>{r.played}</td><td>{r.wins}</td><td>{r.draws}</td><td>{r.losses}</td>
+                      <td className="font-bold">{r.points}</td><td>{r.played}</td><td>{r.wins}</td><td>{r.losses}</td>
                       <td>{r.gf}</td><td>{r.ga}</td><td>{r.gd}</td>
                     </tr>
                   ))}
@@ -183,8 +183,8 @@ export function StatsView({ b, onTeam }: { b: Bundle; onTeam?: ((id: string) => 
         })}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <MiniRank title="Melhor ataque" rows={attack.map((x) => ({ t: x.t, v: x.gf }))} onTeam={onTeam} />
-        <MiniRank title="Melhor defesa" rows={defense.map((x) => ({ t: x.t, v: x.ga }))} onTeam={onTeam} suffix="sofridos" />
+        <MiniRank title="Mais sets vencidos" rows={attack.map((x) => ({ t: x.t, v: x.gf }))} onTeam={onTeam} />
+        <MiniRank title="Menos sets perdidos" rows={defense.map((x) => ({ t: x.t, v: x.ga }))} onTeam={onTeam} suffix="perdidos" />
       </div>
     </div>
   );
@@ -253,7 +253,8 @@ export function TeamDetail({ b, teamId }: { b: Bundle; teamId: string }) {
 export function Timeline({ b, match }: { b: Bundle; match: Match }) {
   const types = new Map(b.eventTypes.map((e) => [e.id, e]));
   const players = new Map(b.players.map((p) => [p.id, p]));
-  const evs = b.events.filter((e) => e.match_id === match.id).sort((a, b) => (a.period ?? 0) - (b.period ?? 0) || (a.minute ?? 0) - (b.minute ?? 0) || a.created_at.localeCompare(b.created_at));
+  // Newest first, so the latest rally is on top during the match.
+  const evs = b.events.filter((e) => e.match_id === match.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   if (!evs.length) return <div className="py-6 text-center text-sm text-muted-foreground">Nenhum evento registrado.</div>;
   return (
     <ol className="space-y-2">
@@ -262,7 +263,7 @@ export function Timeline({ b, match }: { b: Bundle; match: Match }) {
         const p = e.player_id ? players.get(e.player_id) : null;
         return (
           <li key={e.id} className={cn("flex items-center gap-2 text-sm", !home && "flex-row-reverse text-right")}>
-            <span className="w-12 shrink-0 text-center font-display text-muted-foreground">{e.minute != null ? `${e.minute}'` : "–"}</span>
+            <span className="w-14 shrink-0 text-center font-display text-muted-foreground">{e.period != null ? `${e.period}º set` : "–"}</span>
             <span className="rounded-lg bg-secondary px-3 py-1.5">
               {types.get(e.event_type_id)?.icon} <b>{types.get(e.event_type_id)?.name}</b>
               {p && <span className="text-muted-foreground"> · {p.nickname || p.name}</span>}

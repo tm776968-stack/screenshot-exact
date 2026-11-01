@@ -6,17 +6,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import type { Bundle, Player, Team } from "@/lib/data";
+import { readSettings, teamSizeLabel } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 import { Field, ImagePicker, Section, useAction } from "./shared";
 
 export function StepEquipes({ b }: { b: Bundle }) {
   const [editing, setEditing] = useState<Team | "new" | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const size = readSettings(b.tournament.settings).teamSize;
   return (
     <div className="space-y-4">
       <Section
         title={`Equipes (${b.teams.length})`}
-        description="Cadastre as equipes e, se quiser, o elenco de cada uma."
+        description={`${teamSizeLabel(size)}: ${size} atletas em quadra por equipe. Cadastre as equipes e o elenco de cada uma (titulares e reservas).`}
         actions={
           <Button onClick={() => setEditing("new")}>
             <Plus /> Equipe
@@ -36,7 +38,10 @@ export function StepEquipes({ b }: { b: Bundle }) {
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">{t.name}</div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {players.length} jogador{players.length === 1 ? "" : "es"}
+                        <span className={cn(players.length < size && "text-warning")}>
+                          {players.length} atleta{players.length === 1 ? "" : "s"}
+                          {players.length < size && ` (faltam ${size - players.length} para formar o time)`}
+                        </span>
                         {t.manager && ` · ${t.manager}`}
                         {t.contact && ` · ${t.contact}`}
                       </div>
@@ -169,7 +174,7 @@ function Roster({ b, team, players }: { b: Bundle; team: Team; players: Player[]
         </button>
       ))}
       <Button variant="secondary" size="sm" onClick={() => setEditing("new")}>
-        <UserPlus /> Jogador
+        <UserPlus /> Atleta
       </Button>
       {editing && <PlayerDialog b={b} team={team} player={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
     </div>
@@ -208,7 +213,7 @@ function PlayerDialog({ b, team, player, onClose }: { b: Bundle; team: Team; pla
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="font-display text-2xl uppercase">
-            {player ? "Editar jogador" : "Novo jogador"} · {team.name}
+            {player ? "Editar atleta" : "Novo atleta"} · {team.name}
           </DialogTitle>
         </DialogHeader>
         <form
@@ -233,7 +238,7 @@ function PlayerDialog({ b, team, player, onClose }: { b: Bundle; team: Team; pla
             </Field>
           </div>
           <Field label="Posição">
-            <Input value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} placeholder="Ex.: Goleiro, Ala, Pivô" />
+            <Input value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} placeholder="Ex.: Levantador, Ponteiro, Líbero" />
           </Field>
           <div className="flex flex-wrap gap-2">
             {player && (
@@ -272,14 +277,15 @@ function Venues({ b }: { b: Bundle }) {
   const [name, setName] = useState("");
   const { busy, run } = useAction();
   return (
-    <Section title="Locais e quadras" description="Cadastre mais de um local para jogos simultâneos.">
+    <Section title="Quadras" description="Valem para todas as categorias do torneio. Cadastre mais de uma para jogos simultâneos.">
       <form
         className="flex gap-2"
         onSubmit={async (e) => {
           e.preventDefault();
           if (!name.trim()) return;
           const ok = await run(async () => {
-            const { error } = await supabase.from("venues").insert({ name: name.trim(), tournament_id: b.tournament.id });
+            // Courts belong to the main tournament and are shared by every category.
+            const { error } = await supabase.from("venues").insert({ name: name.trim(), tournament_id: b.root.id });
             if (error) throw error;
           });
           if (ok) setName("");

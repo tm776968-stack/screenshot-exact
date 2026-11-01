@@ -10,16 +10,23 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Bundle } from "@/lib/data";
 import { publicUrl } from "@/lib/manage";
+import { divisionLabel } from "@/lib/tournament";
+import { accountLabel, loginToEmail } from "@/lib/usernames";
 import { Section, useAction } from "./shared";
+import { useDivisionCounts } from "./step-categorias";
 
 export function StepPublicar({ b, isOwner }: { b: Bundle; isOwner: boolean }) {
   const t = b.tournament;
   const { busy, run } = useAction();
   const url = publicUrl(t.slug);
+  const counts = useDivisionCounts(b.divisions.map((d) => d.id)).data ?? {};
+  const noTeams = b.divisions.filter((d) => (counts[d.id]?.teams ?? 0) < 2);
+  const noGames = b.divisions.filter((d) => (counts[d.id]?.matches ?? 0) === 0);
+  const names = (list: typeof b.divisions) => list.map(divisionLabel).join(", ");
   const checks = [
-    { ok: b.teams.length >= 2, text: "Pelo menos 2 equipes cadastradas" },
-    { ok: b.matches.length > 0, text: "Tabela de jogos gerada" },
-    { ok: b.matches.some((m) => m.scheduled_at), text: "Horários definidos" },
+    { ok: b.divisions.length > 0, text: "Pelo menos uma categoria criada" },
+    { ok: b.divisions.length > 0 && noTeams.length === 0, text: noTeams.length && b.divisions.length ? `Pelo menos 2 equipes em cada categoria (falta: ${names(noTeams)})` : "Pelo menos 2 equipes em cada categoria" },
+    { ok: b.divisions.length > 0 && noGames.length === 0, text: noGames.length && b.divisions.length ? `Tabela de jogos gerada em cada categoria (falta: ${names(noGames)})` : "Tabela de jogos gerada em cada categoria" },
   ];
 
   function downloadQr() {
@@ -51,6 +58,8 @@ export function StepPublicar({ b, isOwner }: { b: Bundle; isOwner: boolean }) {
                 const patch = v && t.status === "rascunho" ? { published: v, status: "inscricoes" as const } : { published: v };
                 const { error } = await supabase.from("tournaments").update(patch).eq("id", t.id);
                 if (error) throw error;
+                // Categories follow the main tournament's status.
+                if ("status" in patch) await supabase.from("tournaments").update({ status: patch.status }).eq("parent_id", t.id);
               }, v ? "Torneio publicado!" : "Torneio despublicado.")
             }
           />
@@ -120,24 +129,30 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
   return (
     <Section
       title="Co-organizadores"
-      description="Eles editam este torneio com as mesmas permissões que você. A pessoa precisa ter uma conta com esse e-mail, criada pelo administrador do sistema."
+      description="Eles editam este torneio e todas as categorias com as mesmas permissões que você. A pessoa precisa ter uma conta criada pelo administrador do sistema."
     >
       {isOwner && (
         <form
           className="flex gap-2"
           onSubmit={async (e) => {
             e.preventDefault();
-            const v = email.trim().toLowerCase();
-            if (!v) return;
+            if (!email.trim()) return;
+            const v = loginToEmail(email);
+            if (!v) {
+              await run(async () => {
+                throw new Error("Nome de usuário inválido.");
+              });
+              return;
+            }
             const ok = await run(async () => {
               const { error } = await supabase.from("tournament_members").insert({ tournament_id: tournamentId, email: v });
-              if (error) throw error.code === "23505" ? new Error("Este e-mail já foi convidado.") : error;
+              if (error) throw error.code === "23505" ? new Error("Este usuário já foi convidado.") : error;
               await q.refetch();
             }, "Convite registrado.");
             if (ok) setEmail("");
           }}
         >
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@exemplo.com" />
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Nome de usuário" autoCapitalize="none" spellCheck={false} />
           <Button type="submit" disabled={busy || !email.trim()}>
             <Mail /> Convidar
           </Button>
@@ -148,12 +163,12 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
         {q.data?.map((m) => (
           <div key={m.id} className="flex items-center gap-2 rounded-lg border bg-background/40 px-3 py-2 text-sm">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1 truncate">{m.email}</span>
+            <span className="flex-1 truncate">{accountLabel(m.email)}</span>
             {isOwner && (
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label={`Remover ${m.email}`}
+                aria-label={`Remover ${accountLabel(m.email)}`}
                 onClick={() =>
                   run(async () => {
                     const { error } = await supabase.from("tournament_members").delete().eq("id", m.id);
@@ -170,7 +185,7 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
       </div>
       {isOwner && (
         <p className="mt-3 text-xs text-muted-foreground">
-          O sistema não envia e-mail automaticamente: avise a pessoa. Se ela ainda não tiver conta, peça ao administrador para criar.
+          O sistema não avisa a pessoa automaticamente. Se ela ainda não tiver conta, peça ao administrador para criar.
         </p>
       )}
     </Section>

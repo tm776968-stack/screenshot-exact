@@ -1,11 +1,24 @@
 import { useState } from "react";
 import { CalendarDays, MapPin, Timer } from "lucide-react";
-import { Countdown, LiveBadge, MatchCard, MatchClock, TeamCrest } from "@/components/sport";
+import { Countdown, LiveBadge, MatchCard, SetsLine, TeamCrest } from "@/components/sport";
 import { Bracket, Empty, StandingsView, StatsView, TeamDetail, Timeline } from "@/components/views";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Bundle, Match, Team } from "@/lib/data";
 import { teamMap } from "@/lib/data";
-import { fmtDate, fmtDateTime, FORMATS, MATCH_STATUS_LABEL, readSettings, SPORTS, STAGE_LABEL, STATUS_LABEL, standings } from "@/lib/tournament";
+import {
+  divisionLabel,
+  fmtDate,
+  fmtDateTime,
+  FORMATS,
+  MATCH_STATUS_LABEL,
+  readSets,
+  readSettings,
+  sportLabel,
+  STAGE_LABEL,
+  STATUS_LABEL,
+  standings,
+  teamSizeLabel,
+} from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 
 export const isLive = (m: Match) => m.status === "ao_vivo" || m.status === "intervalo";
@@ -28,9 +41,9 @@ export function liveNow(b: Bundle, team: string | null = null) {
 }
 
 export function TournamentHero({ b }: { b: Bundle }) {
-  const t = b.tournament;
-  const sport = SPORTS.find((s) => s.value === t.sport)?.label ?? t.sport;
-  const format = FORMATS.find((f) => f.value === t.format)?.label;
+  const t = b.root;
+  const sport = sportLabel(t.sport);
+  const format = b.tournament.parent_id ? FORMATS.find((f) => f.value === b.tournament.format)?.label : null;
   return (
     <div className="relative overflow-hidden border-b bg-pitch">
       {t.banner_url && <img src={t.banner_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />}
@@ -48,7 +61,7 @@ export function TournamentHero({ b }: { b: Bundle }) {
             <span className="rounded-full bg-primary/15 px-2 py-0.5 font-semibold text-primary">{STATUS_LABEL[t.status]}</span>
             <span>
               {sport}
-              {format && ` · ${format}`}
+              {b.divisions.length > 0 && ` · ${b.divisions.length} categoria${b.divisions.length === 1 ? "" : "s"}`}
             </span>
             {(t.start_date || t.end_date) && (
               <span className="flex items-center gap-1">
@@ -62,6 +75,12 @@ export function TournamentHero({ b }: { b: Bundle }) {
               </span>
             )}
           </div>
+          {b.tournament.parent_id && (
+            <div className="mt-1 text-xs text-muted-foreground sm:text-sm">
+              <b className="text-foreground">{divisionLabel(b.tournament)}</b> · {teamSizeLabel(readSettings(b.tournament.settings).teamSize)}
+              {format && ` · ${format}`}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -85,15 +104,11 @@ export function useMatchDialog(b: Bundle) {
           <DialogSide team={m.home_team_id ? teams.get(m.home_team_id) : null} />
           <div>
             <div className="scoreboard text-5xl">{isLive(m) || isDone(m) ? `${m.home_score}:${m.away_score}` : "vs"}</div>
-            {m.home_pens != null && (
-              <div className="text-xs text-muted-foreground">
-                Pênaltis {m.home_pens} x {m.away_pens}
-              </div>
-            )}
+            {(isLive(m) || isDone(m)) && <div className="text-xs text-muted-foreground">sets</div>}
             <div className="mt-1 text-xs">
               {isLive(m) ? (
                 <span className="inline-flex items-center gap-2">
-                  <LiveBadge /> {m.status === "intervalo" ? "Intervalo" : <MatchClock match={m} />}
+                  <LiveBadge /> {m.period}º set: {readSets(m.sets).at(-1)?.h ?? 0} a {readSets(m.sets).at(-1)?.a ?? 0}
                 </span>
               ) : (
                 <span className="text-muted-foreground">{isDone(m) ? MATCH_STATUS_LABEL[m.status] : fmtDateTime(m.scheduled_at)}</span>
@@ -102,6 +117,11 @@ export function useMatchDialog(b: Bundle) {
           </div>
           <DialogSide team={m.away_team_id ? teams.get(m.away_team_id) : null} />
         </div>
+        {(isLive(m) || isDone(m)) && (
+          <div className="flex justify-center">
+            <SetsLine match={m} className="text-sm" />
+          </div>
+        )}
         <div className="mt-2 border-t pt-4">
           <Timeline b={b} match={m} />
         </div>
@@ -197,15 +217,14 @@ export function TeamsTab({ b, selected, onSelect }: { b: Bundle; selected: strin
         </button>
         <TeamDetail b={b} teamId={selected} />
         {row && (
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {[
               ["Jogos", row.played],
               ["Vitórias", row.wins],
-              ["Empates", row.draws],
               ["Derrotas", row.losses],
-              ["Pró", row.gf],
-              ["Contra", row.ga],
-              ["Saldo", row.gd],
+              ["Sets vencidos", row.gf],
+              ["Sets perdidos", row.ga],
+              ["Saldo de sets", row.gd],
             ].map(([l, v]) => (
               <div key={l as string} className="rounded-lg border bg-card p-2 text-center">
                 <div className="scoreboard text-2xl">{v}</div>
@@ -230,7 +249,7 @@ export function TeamsTab({ b, selected, onSelect }: { b: Bundle; selected: strin
         <button key={t.id} onClick={() => onSelect(t.id)} className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 text-center transition hover:border-primary/50">
           <TeamCrest team={t} size={56} />
           <span className="w-full truncate font-semibold">{t.name}</span>
-          <span className="text-xs text-muted-foreground">{b.players.filter((p) => p.team_id === t.id).length} jogadores</span>
+          <span className="text-xs text-muted-foreground">{b.players.filter((p) => p.team_id === t.id).length} atletas</span>
         </button>
       ))}
     </div>
@@ -238,8 +257,8 @@ export function TeamsTab({ b, selected, onSelect }: { b: Bundle; selected: strin
 }
 
 export function RulesTab({ b }: { b: Bundle }) {
-  if (!b.tournament.rules) return <Empty>O regulamento ainda não foi publicado.</Empty>;
-  return <div className="whitespace-pre-wrap rounded-xl border bg-card p-5 text-sm leading-relaxed">{b.tournament.rules}</div>;
+  if (!b.root.rules) return <Empty>O regulamento ainda não foi publicado.</Empty>;
+  return <div className="whitespace-pre-wrap rounded-xl border bg-card p-5 text-sm leading-relaxed">{b.root.rules}</div>;
 }
 
 export function TeamFilter({ b, value, onChange }: { b: Bundle; value: string | null; onChange: (v: string | null) => void }) {

@@ -8,9 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Bundle, EventType } from "@/lib/data";
 import { readExt, resetEventTypes, saveSettings, type ExtSettings } from "@/lib/manage";
-import { eventPresets, FORMATS, SPORTS, TIEBREAKER_LABEL, type Tiebreaker } from "@/lib/tournament";
+import { eventPresets, FORMATS, sportLabel, TEAM_SIZES, TIEBREAKER_LABEL, type Tiebreaker } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 import { Field, moveItem, Section, useAction, useDragList } from "./shared";
+import { SetRulesFields } from "./step-categorias";
 
 const FORMAT_HELP: Record<string, string> = {
   mata_mata: "Quem perde está fora. Pode ter disputa de 3º lugar.",
@@ -26,7 +27,6 @@ export function StepFormato({ b }: { b: Bundle }) {
   const { busy, run } = useAction();
   const set = <K extends keyof ExtSettings>(k: K, v: ExtSettings[K]) => setS((cur) => ({ ...cur, [k]: v }));
   const tb = useDragList<Tiebreaker>(s.tiebreakers, (v) => set("tiebreakers", v));
-  const knockoutish = format === "mata_mata" || format === "grupos_mata_mata" || format === "dupla_eliminacao";
   const leagueish = format === "pontos_corridos" || format === "grupos_mata_mata";
   const hasMatches = b.matches.length > 0;
 
@@ -86,22 +86,38 @@ export function StepFormato({ b }: { b: Bundle }) {
           </div>
         </Section>
 
-        <Section title="Pontuação e empates">
-          <div className="grid grid-cols-3 gap-3">
+        <Section title="Time e sets" description={hasMatches ? "Mudar os sets ou os pontos recalcula o placar dos jogos na próxima vez que a súmula for usada." : undefined}>
+          <Field label="Formato do time">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {TEAM_SIZES.map((x) => (
+                <button
+                  key={x.value}
+                  type="button"
+                  onClick={() => set("teamSize", x.value)}
+                  className={cn("rounded-xl border p-3 text-left transition", s.teamSize === x.value ? "border-primary bg-primary/10" : "bg-background/40 hover:border-primary/40")}
+                >
+                  <span className="block font-display text-xl uppercase">{x.label}</span>
+                  <span className="block text-xs text-muted-foreground">{x.value} atletas em quadra</span>
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div className="mt-4">
+            <SetRulesFields value={s} onChange={(patch) => setS((cur) => ({ ...cur, ...patch }))} />
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Toggle label="Vantagem de 2 pontos" hint="O set só termina com 2 pontos de diferença (ex.: 26 a 24)." checked={s.winBy2} onChange={(v) => set("winBy2", v)} />
+          </div>
+        </Section>
+
+        <Section title="Pontuação na classificação" description="Pontos que a equipe soma na tabela por vitória e por derrota.">
+          <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
             <Field label="Vitória">
-              <Input type="number" value={s.win} onChange={(e) => set("win", Number(e.target.value))} />
-            </Field>
-            <Field label="Empate">
-              <Input type="number" value={s.draw} onChange={(e) => set("draw", Number(e.target.value))} />
+              <Input type="number" min={0} value={s.win} onChange={(e) => set("win", Number(e.target.value))} />
             </Field>
             <Field label="Derrota">
-              <Input type="number" value={s.loss} onChange={(e) => set("loss", Number(e.target.value))} />
+              <Input type="number" min={0} value={s.loss} onChange={(e) => set("loss", Number(e.target.value))} />
             </Field>
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <Toggle label="Permitir empate" hint="Se desligado, empates vão para os pênaltis." checked={s.allowDraw} onChange={(v) => set("allowDraw", v)} />
-            {knockoutish && <Toggle label="Prorrogação no mata-mata" checked={s.extraTime} onChange={(v) => set("extraTime", v)} />}
-            {knockoutish && <Toggle label="Pênaltis no mata-mata" checked={s.penalties} onChange={(v) => set("penalties", v)} />}
           </div>
         </Section>
 
@@ -134,17 +150,6 @@ export function StepFormato({ b }: { b: Bundle }) {
           </ol>
         </Section>
 
-        <Section title="Suspensão automática" description="O jogador fica fora do próximo jogo e a súmula avisa. Use 0 para desligar.">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Amarelos para suspender">
-              <Input type="number" min={0} value={s.suspensionYellows} onChange={(e) => set("suspensionYellows", Math.max(0, Number(e.target.value)))} />
-            </Field>
-            <Field label="Vermelhos para suspender">
-              <Input type="number" min={0} value={s.suspensionReds} onChange={(e) => set("suspensionReds", Math.max(0, Number(e.target.value)))} />
-            </Field>
-          </div>
-        </Section>
-
         <div className="flex justify-end">
           <Button type="submit" size="lg" disabled={busy}>
             {busy ? "Salvando..." : "Salvar formato e regras"}
@@ -171,7 +176,7 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
 function ScoutConfig({ b }: { b: Bundle }) {
   const { busy, run } = useAction();
   const [editing, setEditing] = useState<EventType | "new" | null>(null);
-  const sport = SPORTS.find((x) => x.value === b.tournament.sport)?.label ?? "modalidade";
+  const sport = sportLabel(b.tournament.sport);
   const presetKeys = new Set(eventPresets(b.tournament.sport).map((p) => p.key));
   return (
     <Section
@@ -204,7 +209,7 @@ function ScoutConfig({ b }: { b: Bundle }) {
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEditing(e)}>
               <div className={cn("truncate font-semibold", !e.enabled && "text-muted-foreground line-through")}>{e.name}</div>
               <div className="text-xs text-muted-foreground">
-                {e.points > 0 ? `${e.points} ponto${e.points > 1 ? "s" : ""} para ${e.score_target === "own" ? "a própria equipe" : "o adversário"}` : "Não altera o placar"}
+                {e.points > 0 ? `${e.points} ponto${e.points > 1 ? "s" : ""} no set para ${e.score_target === "own" ? "a própria equipe" : "o adversário"}` : "Não altera o placar"}
                 {!presetKeys.has(e.key) && " · personalizado"}
               </div>
             </button>
@@ -264,11 +269,11 @@ function EventTypeDialog({ b, et, onClose }: { b: Bundle; et: EventType | null; 
               <Input value={f.icon} maxLength={4} onChange={(e) => setF({ ...f, icon: e.target.value })} className="text-center text-xl" />
             </Field>
             <Field label="Nome" className="col-span-3">
-              <Input autoFocus required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Ex.: Desarme" />
+              <Input autoFocus required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Ex.: Largada" />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Soma ao placar" hint="0 = só estatística">
+            <Field label="Pontos no set" hint="0 = só estatística">
               <Input type="number" min={0} max={10} value={f.points} onChange={(e) => setF({ ...f, points: Math.max(0, Number(e.target.value)) })} />
             </Field>
             <Field label="Pontos vão para">
