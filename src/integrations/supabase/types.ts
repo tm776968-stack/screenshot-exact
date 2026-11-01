@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      categories: {
+        Row: {
+          birth_year_max: number | null
+          birth_year_min: number | null
+          created_at: string
+          enabled: boolean
+          id: string
+          name: string
+          short_name: string | null
+          sort: number
+          tournament_id: string
+        }
+        Insert: {
+          birth_year_max?: number | null
+          birth_year_min?: number | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name: string
+          short_name?: string | null
+          sort?: number
+          tournament_id: string
+        }
+        Update: {
+          birth_year_max?: number | null
+          birth_year_min?: number | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          short_name?: string | null
+          sort?: number
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_types: {
         Row: {
           enabled: boolean
@@ -136,6 +180,7 @@ export type Database = {
           away_score: number
           away_team_id: string | null
           bracket_pos: number | null
+          category_id: string | null
           clock_elapsed: number
           clock_started_at: string | null
           created_at: string
@@ -160,6 +205,7 @@ export type Database = {
           away_score?: number
           away_team_id?: string | null
           bracket_pos?: number | null
+          category_id?: string | null
           clock_elapsed?: number
           clock_started_at?: string | null
           created_at?: string
@@ -184,6 +230,7 @@ export type Database = {
           away_score?: number
           away_team_id?: string | null
           bracket_pos?: number | null
+          category_id?: string | null
           clock_elapsed?: number
           clock_started_at?: string | null
           created_at?: string
@@ -210,6 +257,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_category_fkey"
+            columns: ["category_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "tournament_id"]
           },
           {
             foreignKeyName: "matches_home_team_id_fkey"
@@ -248,8 +302,55 @@ export type Database = {
           },
         ]
       }
+      player_categories: {
+        Row: {
+          category_id: string
+          created_at: string
+          id: string
+          player_id: string
+          tournament_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          id?: string
+          player_id: string
+          tournament_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          id?: string
+          player_id?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_categories_category_fkey"
+            columns: ["category_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "tournament_id"]
+          },
+          {
+            foreignKeyName: "player_categories_player_fkey"
+            columns: ["player_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id", "tournament_id"]
+          },
+          {
+            foreignKeyName: "player_categories_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       players: {
         Row: {
+          birth_date: string | null
           created_at: string
           id: string
           name: string
@@ -261,6 +362,7 @@ export type Database = {
           tournament_id: string
         }
         Insert: {
+          birth_date?: string | null
           created_at?: string
           id?: string
           name: string
@@ -272,6 +374,7 @@ export type Database = {
           tournament_id: string
         }
         Update: {
+          birth_date?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -488,6 +591,10 @@ export type Database = {
     }
     Functions: {
       can_edit_tournament: { Args: { _tid: string }; Returns: boolean }
+      is_player_eligible: {
+        Args: { _category_id: string; _player_id: string }
+        Returns: boolean
+      }
       is_tournament_public: { Args: { _tid: string }; Returns: boolean }
     }
     Enums: {

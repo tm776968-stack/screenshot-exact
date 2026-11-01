@@ -8,6 +8,13 @@
       "when": 1792859299599,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793572112433,
+      "tag": "0001_volei_categorias",
+      "breakpoints": true
     }
   ]
 }
