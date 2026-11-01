@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Brand, PageLoading } from "@/components/app-header";
@@ -22,8 +22,20 @@ function DefinirSenha() {
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [busy, setBusy] = useState(false);
-  if (loading) return <PageLoading />;
+  const checked = useRef(false);
   const temporary = mustChangePassword(session?.user);
+
+  // The browser may still hold an old token that says the password is temporary.
+  // Ask for a fresh one once; if the password was already changed, go straight to the panel.
+  useEffect(() => {
+    if (loading || !session || !temporary || checked.current) return;
+    checked.current = true;
+    supabase.auth.refreshSession().then(({ data }) => {
+      if (data.session && !mustChangePassword(data.session.user)) navigate({ to: "/painel" });
+    });
+  }, [loading, session, temporary, navigate]);
+
+  if (loading) return <PageLoading />;
   return (
     <div className="flex min-h-screen flex-col bg-pitch px-4">
       <div className="mx-auto w-full max-w-sm pt-6">
@@ -51,10 +63,10 @@ function DefinirSenha() {
               setBusy(true);
               try {
                 await changeOwnPassword({ data: { password: p1 } });
-                // Pick up the cleared flag in a fresh token.
-                await supabase.auth.refreshSession();
-                toast.success("Senha salva!");
-                navigate({ to: "/painel" });
+                // Start over with the new password, so the session no longer carries the "temporary" mark.
+                await supabase.auth.signOut();
+                toast.success("Senha salva! Entre com a nova senha.");
+                navigate({ to: "/entrar" });
               } catch (err) {
                 toast.error(errMsg(err));
               } finally {
@@ -82,6 +94,16 @@ function DefinirSenha() {
             <Button type="submit" size="lg" className="w-full" disabled={busy}>
               Salvar senha
             </Button>
+            <button
+              type="button"
+              className="w-full text-center text-sm text-muted-foreground hover:text-primary"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                navigate({ to: "/entrar" });
+              }}
+            >
+              Sair e entrar de novo
+            </button>
           </form>
         )}
       </div>
