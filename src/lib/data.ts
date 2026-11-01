@@ -69,6 +69,13 @@ export const bundleBySlug = (slug: string) =>
     },
   });
 
+/** Loads a tournament or category with everything in it (outside React Query). */
+export async function fetchBundle(id: string): Promise<Bundle | null> {
+  const { data, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? loadBundle(data) : null;
+}
+
 export const bundleById = (id: string) =>
   queryOptions({
     queryKey: ["bundle", "id", id],

@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import type { Bundle, Match, Tournament } from "@/lib/data";
+import { fetchBundle, type Bundle, type Match, type Tournament } from "@/lib/data";
 import {
   DEFAULT_SETTINGS,
   doubleElimination,
@@ -12,6 +12,7 @@ import {
   slugify,
   volleyDefaults,
   volleyState,
+  NAIPES,
   type DoubleElimMatch,
   type NewMatch,
   type Settings,
@@ -324,4 +325,92 @@ export function publicUrl(slug: string) {
 export function errMsg(e: unknown) {
   if (e && typeof e === "object" && "message" in e) return String((e as { message: unknown }).message);
   return "Algo deu errado. Tente novamente.";
+}
+
+/* ---------------- test data ---------------- */
+
+export const TEST_PREFIX = "Teste ";
+const TEST_COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706"];
+const TEST_NAMES = ["Ana", "Bruno", "Carla", "Diego", "Elisa", "Fábio", "Gabi", "Hugo", "Iara", "João", "Kátia", "Léo"];
+
+/**
+ * Fills the tournament with test data: when it has no categories yet, creates Sub-17 and Adulto in
+ * every naipe; then, in each category without teams, adds 4 test teams with a full lineup,
+ * generates the games and spreads them from tomorrow at 9:00.
+ */
+export async function seedTestData(root: Tournament, divisions: Tournament[], onProgress?: (msg: string) => void) {
+  let ids = divisions.map((d) => d.id);
+  if (!ids.length) {
+    const base = volleyDefaults(root.sport);
+    for (const category of ["Sub-17", "Adulto"]) {
+      for (const naipe of NAIPES) {
+        onProgress?.(`Criando ${category} ${naipe}...`);
+        const { id } = await createDivision(root, {
+          category,
+          naipe,
+          teamSize: base.teamSize,
+          bestOf: base.bestOf,
+          setPoints: base.setPoints,
+          tieBreakPoints: base.tieBreakPoints,
+        });
+        ids.push(id);
+      }
+    }
+  }
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const startIso = new Date(`${start.toISOString().slice(0, 10)}T09:00:00-03:00`).toISOString();
+  let filled = 0;
+  for (const id of ids) {
+    let b = await fetchBundle(id);
+    if (!b || b.teams.length > 0) continue;
+    const label = [b.tournament.category, b.tournament.naipe].filter(Boolean).join(" ");
+    onProgress?.(`Preenchendo ${label}...`);
+    const size = readSettings(b.tournament.settings).teamSize;
+    for (let t = 0; t < 4; t++) {
+      const teamId = crypto.randomUUID();
+      const { error } = await supabase.from("teams").insert({
+        id: teamId,
+        tournament_id: id,
+        name: `${TEST_PREFIX}${String.fromCharCode(65 + t)}`,
+        color: TEST_COLORS[t] ?? null,
+        seed: t + 1,
+      });
+      if (error) throw error;
+      const players = Array.from({ length: size }, (_, i) => ({
+        tournament_id: id,
+        team_id: teamId,
+        name: `${TEST_NAMES[(t * 3 + i) % TEST_NAMES.length]} ${String.fromCharCode(65 + t)}${i + 1}`,
+        number: i + 1,
+      }));
+      const { error: e2 } = await supabase.from("players").insert(players);
+      if (e2) throw e2;
+    }
+    b = await fetchBundle(id);
+    if (!b) continue;
+    const { matches, error } = buildSchedule(b);
+    if (error) throw new Error(`${label}: ${error}`);
+    await insertMatches(b, matches);
+    b = await fetchBundle(id);
+    if (b) await distributeTimes(b, startIso, 40, false);
+    filled++;
+  }
+  return { filled, total: ids.length };
+}
+
+/** Removes the test teams (and their games) from every category of the tournament. */
+export async function removeTestData(divisions: Tournament[]) {
+  const ids = divisions.map((d) => d.id);
+  if (!ids.length) return 0;
+  const { data: teams, error } = await supabase.from("teams").select("id, tournament_id").in("tournament_id", ids).like("name", `${TEST_PREFIX}%`);
+  if (error) throw error;
+  if (!teams?.length) return 0;
+  const teamIds = teams.map((t) => t.id);
+  const touched = [...new Set(teams.map((t) => t.tournament_id))];
+  // Games of categories that had test teams are test games too.
+  const { error: e1 } = await supabase.from("matches").delete().in("tournament_id", touched);
+  if (e1) throw e1;
+  const { error: e2 } = await supabase.from("teams").delete().in("id", teamIds);
+  if (e2) throw e2;
+  return teamIds.length;
 }

@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import type { Bundle, Tournament } from "@/lib/data";
-import { createDivision, updateDivision, type DivisionInput } from "@/lib/manage";
+import { createDivision, removeTestData, seedTestData, updateDivision, type DivisionInput } from "@/lib/manage";
 import {
   CATEGORY_SUGGESTIONS,
   divisionLabel,
@@ -59,9 +59,12 @@ export function StepCategorias({ b }: { b: Bundle }) {
         title={`Categorias e naipes (${b.divisions.length})`}
         description={`Cada categoria tem equipes, formato, chave e jogos próprios. Modalidade: ${sportLabel(root.sport)}.`}
         actions={
-          <Button onClick={() => setEditing("new")}>
-            <Plus /> Categoria
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <TestDataButtons b={b} />
+            <Button onClick={() => setEditing("new")}>
+              <Plus /> Categoria
+            </Button>
+          </div>
         }
       >
         {b.divisions.length === 0 && (
@@ -109,6 +112,57 @@ export function StepCategorias({ b }: { b: Bundle }) {
       </Section>
       {editing && <DivisionDialog b={b} div={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
     </div>
+  );
+}
+
+function TestDataButtons({ b }: { b: Bundle }) {
+  const { busy, run } = useAction();
+  const [step, setStep] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  if (confirmRemove)
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-2 py-1 text-sm">
+        Apagar equipes “Teste” e os jogos dessas categorias?
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={busy}
+          onClick={async () => {
+            await run(async () => {
+              const n = await removeTestData(b.divisions);
+              if (!n) throw new Error("Não há dados de teste para apagar.");
+            }, "Dados de teste apagados.");
+            setConfirmRemove(false);
+          }}
+        >
+          Apagar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(false)}>
+          Cancelar
+        </Button>
+      </div>
+    );
+  return (
+    <>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={() =>
+          run(async () => {
+            const r = await seedTestData(b.root, b.divisions, setStep);
+            setStep(null);
+            if (!r.filled) throw new Error("Todas as categorias já têm equipes. Os dados de teste só entram em categorias vazias.");
+          }, "Dados de teste criados: 4 equipes e jogos em cada categoria.")
+        }
+      >
+        <FlaskConical /> {busy && step ? step : "Criar dados de teste"}
+      </Button>
+      {b.divisions.length > 0 && (
+        <Button variant="ghost" disabled={busy} onClick={() => setConfirmRemove(true)}>
+          Apagar testes
+        </Button>
+      )}
+    </>
   );
 }
 
