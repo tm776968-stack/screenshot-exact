@@ -17,7 +17,7 @@ import { divisionLabel, MATCH_STATUS_LABEL, readSets, setsToWin, STAGE_LABEL, su
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/sumula/$matchId")({
-  head: () => ({ meta: [{ title: "Súmula ao vivo — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Súmula ao vivo — Placar Pro"}, {"name": "description", "content": "Registre os pontos e acompanhe os sets de uma partida de vôlei."}, {"property": "og:title", "content": "Súmula ao vivo — Placar Pro"}, {"property": "og:description", "content": "Registre os pontos e acompanhe os sets de uma partida de vôlei."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: Sumula,
 });
 

@@ -14,7 +14,7 @@ import { divisionLabel, fmtDateTime, readSettings, STAGE_LABEL, standings } from
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv/$slug")({
-  head: () => ({ meta: [{ title: "Modo TV — Placar Pro" }] }),
+  head: () => ({ meta: [{"title": "Modo TV — Placar Pro"}, {"name": "description", "content": "Acompanhe partidas e resultados de vôlei no telão do torneio."}, {"property": "og:title", "content": "Modo TV — Placar Pro"}, {"property": "og:description", "content": "Acompanhe partidas e resultados de vôlei no telão do torneio."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary_large_image"}] }),
   component: TvPage,
 });
 
