@@ -1,3 +1,4 @@
+-- Pode rodar mais de uma vez sem erro.
 -- Administradores do sistema (identificados pelo e-mail).
 create table if not exists public.app_admins (
   email text primary key,
@@ -6,6 +7,7 @@ create table if not exists public.app_admins (
 grant select on public.app_admins to authenticated;
 grant all on public.app_admins to service_role;
 alter table public.app_admins enable row level security;
+drop policy if exists "admin reads own row" on public.app_admins;
 create policy "admin reads own row" on public.app_admins for select to authenticated
   using (lower(email) = lower(coalesce(auth.jwt()->>'email', '')));
 

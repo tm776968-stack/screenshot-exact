@@ -1,4 +1,6 @@
 -- Vôlei de quadra e areia, categorias e naipes, administrador "Admin".
+-- Pode rodar mais de uma vez sem erro. As tabelas categories/player_categories da migração 0001
+-- ficam sem uso: cada categoria + naipe é um torneio filho (parent_id), como abaixo.
 
 -- Categorias e naipes: cada categoria/naipe é um torneio filho (parent_id) com equipes,
 -- formato, chave e jogos próprios. O torneio principal guarda nome, local, datas,
