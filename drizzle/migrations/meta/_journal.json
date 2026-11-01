@@ -15,6 +15,20 @@
       "when": 1793572112433,
       "tag": "0001_volei_categorias",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793580000000,
+      "tag": "0002_admin_login",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793580000001,
+      "tag": "0003_categorias_naipes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,23 +1,28 @@
-export type Sport =
-  | "futebol"
-  | "futsal"
-  | "society"
-  | "volei"
-  | "basquete"
-  | "beach_tennis"
-  | "esports"
-  | "outra";
+export type Sport = "volei_quadra" | "volei_areia";
 
 export const SPORTS: { value: Sport; label: string }[] = [
-  { value: "futebol", label: "Futebol" },
-  { value: "futsal", label: "Futsal" },
-  { value: "society", label: "Society" },
-  { value: "volei", label: "Vôlei" },
-  { value: "basquete", label: "Basquete" },
-  { value: "beach_tennis", label: "Beach Tennis" },
-  { value: "esports", label: "E-sports" },
-  { value: "outra", label: "Outra" },
+  { value: "volei_quadra", label: "Vôlei de quadra" },
+  { value: "volei_areia", label: "Vôlei de areia" },
 ];
+
+export const sportLabel = (v: string | null | undefined) => SPORTS.find((s) => s.value === v)?.label ?? "Vôlei";
+
+/** Players on court per team. */
+export const TEAM_SIZES = [
+  { value: 2, label: "Dupla" },
+  { value: 3, label: "Trinca" },
+  { value: 4, label: "Quarteto" },
+  { value: 6, label: "Sexteto" },
+] as const;
+export const teamSizeLabel = (n: number | null | undefined) => TEAM_SIZES.find((t) => t.value === n)?.label ?? "Sexteto";
+
+export const NAIPES = ["Masculino", "Feminino", "Misto"] as const;
+export const CATEGORY_SUGGESTIONS = ["Sub-13", "Sub-15", "Sub-17", "Sub-19", "Sub-21", "Adulto", "Livre", "Master 35+", "Master 40+", "Master 50+"];
+
+/** "Sub-17 · Feminino" */
+export function divisionLabel(t: { category?: string | null; naipe?: string | null }) {
+  return [t.category, t.naipe].filter(Boolean).join(" · ") || "Categoria única";
+}
 
 export const FORMATS = [
   { value: "mata_mata", label: "Mata-mata" },
@@ -46,8 +51,8 @@ export type Tiebreaker = "pontos" | "vitorias" | "saldo" | "gols_pro" | "confron
 export const TIEBREAKER_LABEL: Record<Tiebreaker, string> = {
   pontos: "Pontos",
   vitorias: "Vitórias",
-  saldo: "Saldo",
-  gols_pro: "Gols pró",
+  saldo: "Saldo de sets",
+  gols_pro: "Sets vencidos",
   confronto: "Confronto direto",
   sorteio: "Sorteio",
 };
@@ -66,6 +71,16 @@ export interface Settings {
   qualifiersPerGroup: number;
   suspensionYellows: number;
   suspensionReds: number;
+  /** Players on court: 2 dupla, 3 trinca, 4 quarteto, 6 sexteto. */
+  teamSize: number;
+  /** Sets per match, played as "best of": 1, 3 or 5. */
+  bestOf: number;
+  /** Points to win a regular set. */
+  setPoints: number;
+  /** Points to win the deciding set (tie-break). */
+  tieBreakPoints: number;
+  /** A set only ends with a 2-point lead. */
+  winBy2: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -82,7 +97,28 @@ export const DEFAULT_SETTINGS: Settings = {
   qualifiersPerGroup: 2,
   suspensionYellows: 3,
   suspensionReds: 1,
+  teamSize: 6,
+  bestOf: 3,
+  setPoints: 25,
+  tieBreakPoints: 15,
+  winBy2: true,
 };
+
+/** Usual rules for each modality and team size, used when a category is created. */
+export function volleyDefaults(sport: string, teamSize?: number): Pick<Settings, "teamSize" | "bestOf" | "setPoints" | "tieBreakPoints" | "winBy2" | "allowDraw" | "win" | "draw" | "loss"> {
+  const sand = sport === "volei_areia";
+  return {
+    teamSize: teamSize ?? (sand ? 2 : 6),
+    bestOf: 3,
+    setPoints: sand ? 21 : 25,
+    tieBreakPoints: 15,
+    winBy2: true,
+    allowDraw: false,
+    win: 3,
+    draw: 0,
+    loss: 0,
+  };
+}
 
 export function readSettings(raw: unknown): Settings {
   return { ...DEFAULT_SETTINGS, ...((raw as Partial<Settings>) ?? {}) };
@@ -96,38 +132,18 @@ export interface EventPreset {
   score_target: "own" | "opponent";
 }
 
-const FOOT: EventPreset[] = [
-  { key: "gol", name: "Gol", icon: "⚽", points: 1, score_target: "own" },
-  { key: "gol_contra", name: "Gol contra", icon: "🥅", points: 1, score_target: "opponent" },
-  { key: "assistencia", name: "Assistência", icon: "🅰️", points: 0, score_target: "own" },
-  { key: "amarelo", name: "Cartão amarelo", icon: "🟨", points: 0, score_target: "own" },
-  { key: "vermelho", name: "Cartão vermelho", icon: "🟥", points: 0, score_target: "own" },
-  { key: "finalizacao", name: "Finalização", icon: "🎯", points: 0, score_target: "own" },
-  { key: "falta", name: "Falta", icon: "✋", points: 0, score_target: "own" },
-  { key: "defesa", name: "Defesa do goleiro", icon: "🧤", points: 0, score_target: "own" },
-  { key: "substituicao", name: "Substituição", icon: "🔁", points: 0, score_target: "own" },
-];
-
-export function eventPresets(sport: string): EventPreset[] {
-  if (sport === "volei" || sport === "beach_tennis")
-    return [
-      { key: "ataque", name: "Ponto de ataque", icon: "💥", points: 1, score_target: "own" },
-      { key: "bloqueio", name: "Bloqueio", icon: "🧱", points: 1, score_target: "own" },
-      { key: "ace", name: "Ace", icon: "🎯", points: 1, score_target: "own" },
-      { key: "erro", name: "Erro", icon: "❌", points: 1, score_target: "opponent" },
-    ];
-  if (sport === "basquete")
-    return [
-      { key: "cesta1", name: "Cesta de 1", icon: "1️⃣", points: 1, score_target: "own" },
-      { key: "cesta2", name: "Cesta de 2", icon: "2️⃣", points: 2, score_target: "own" },
-      { key: "cesta3", name: "Cesta de 3", icon: "3️⃣", points: 3, score_target: "own" },
-      { key: "rebote", name: "Rebote", icon: "🏀", points: 0, score_target: "own" },
-      { key: "assistencia", name: "Assistência", icon: "🅰️", points: 0, score_target: "own" },
-      { key: "falta", name: "Falta", icon: "✋", points: 0, score_target: "own" },
-    ];
-  if (sport === "esports")
-    return [{ key: "ponto", name: "Ponto", icon: "🎮", points: 1, score_target: "own" }];
-  return FOOT;
+/** Scout for volleyball. Events that score add a rally point to the current set. */
+export function eventPresets(_sport?: string): EventPreset[] {
+  return [
+    { key: "ponto", name: "Ponto", icon: "🏐", points: 1, score_target: "own" },
+    { key: "ataque", name: "Ponto de ataque", icon: "💥", points: 1, score_target: "own" },
+    { key: "bloqueio", name: "Bloqueio", icon: "🧱", points: 1, score_target: "own" },
+    { key: "ace", name: "Ace", icon: "🎯", points: 1, score_target: "own" },
+    { key: "erro", name: "Erro (ponto do adversário)", icon: "❌", points: 1, score_target: "opponent" },
+    { key: "defesa", name: "Defesa", icon: "🛡️", points: 0, score_target: "own" },
+    { key: "amarelo", name: "Cartão amarelo", icon: "🟨", points: 0, score_target: "own" },
+    { key: "vermelho", name: "Cartão vermelho", icon: "🟥", points: 0, score_target: "own" },
+  ];
 }
 
 export function slugify(s: string) {
@@ -244,6 +260,9 @@ export const STAGE_LABEL: Record<string, string> = {
   oitavas: "Oitavas de final",
   mata: "Mata-mata",
   terceiro: "Disputa de 3º lugar",
+  vencedores: "Chave dos vencedores",
+  perdedores: "Chave dos perdedores",
+  grande_final: "Grande final",
 };
 
 /** Standard seeding order for a bracket of size n (1-indexed seeds). */
@@ -432,4 +451,199 @@ export function suspendedPlayers(
     if ((yellowHit || redHit) && c.lastMatchCard === lastPrior) out.add(pid);
   });
   return out;
+}
+
+/* ---------------- double elimination ---------------- */
+
+export interface DoubleElimMatch extends NewMatch {
+  /** Where the loser of this match goes (winners bracket only). */
+  loser_key?: string | null;
+  loser_slot?: "home" | "away" | null;
+}
+
+/**
+ * Double elimination for a power-of-two number of teams (4, 8, 16, 32...).
+ * Winners bracket (stage "vencedores"), losers bracket ("perdedores") and a
+ * single grand final ("grande_final"). Teams in seed order, best first.
+ */
+export function doubleElimination(teamIds: string[]): DoubleElimMatch[] {
+  const n = teamIds.length;
+  if (n < 4 || (n & (n - 1)) !== 0) return [];
+  const k = Math.log2(n);
+  const order = seedOrder(n);
+  const slots = order.map((s) => teamIds[s - 1] ?? null);
+  const out: DoubleElimMatch[] = [];
+  const W = (r: number, i: number) => `W-${r}-${i}`;
+  const L = (r: number, i: number) => `L-${r}-${i}`;
+
+  // winners bracket
+  for (let r = 1; r <= k; r++) {
+    const count = n / 2 ** r;
+    for (let i = 0; i < count; i++) {
+      out.push({
+        key: W(r, i),
+        stage: "vencedores",
+        round: r,
+        bracket_pos: i,
+        home_team_id: r === 1 ? slots[i * 2]! : null,
+        away_team_id: r === 1 ? slots[i * 2 + 1]! : null,
+        next_key: r < k ? W(r + 1, Math.floor(i / 2)) : "GF",
+        next_slot: r < k ? (i % 2 === 0 ? "home" : "away") : "home",
+      });
+    }
+  }
+
+  // losers bracket: 2(k-1) rounds
+  const lRounds = 2 * (k - 1);
+  for (let lr = 1; lr <= lRounds; lr++) {
+    const count = n / 2 ** (Math.floor((lr + 1) / 2) + 1);
+    for (let i = 0; i < count; i++) {
+      const last = lr === lRounds;
+      let next_key: string;
+      let next_slot: "home" | "away";
+      if (last) {
+        next_key = "GF";
+        next_slot = "away";
+      } else if (lr % 2 === 1) {
+        // odd round feeds the even round 1:1 (meets a loser dropping from winners)
+        next_key = L(lr + 1, i);
+        next_slot = "home";
+      } else {
+        next_key = L(lr + 1, Math.floor(i / 2));
+        next_slot = i % 2 === 0 ? "home" : "away";
+      }
+      out.push({
+        key: L(lr, i),
+        stage: "perdedores",
+        round: lr,
+        bracket_pos: i,
+        home_team_id: null,
+        away_team_id: null,
+        next_key,
+        next_slot,
+      });
+    }
+  }
+
+  // losers drop-down routing
+  for (const m of out.filter((x) => x.stage === "vencedores")) {
+    const r = m.round;
+    const i = m.bracket_pos ?? 0;
+    if (r === 1) {
+      m.loser_key = L(1, Math.floor(i / 2));
+      m.loser_slot = i % 2 === 0 ? "home" : "away";
+    } else {
+      // reverse order on alternate rounds to avoid early rematches
+      const count = n / 2 ** r;
+      const j = r % 2 === 0 ? count - 1 - i : i;
+      m.loser_key = L(2 * (r - 1), j);
+      m.loser_slot = "away";
+    }
+  }
+
+  out.push({
+    key: "GF",
+    stage: "grande_final",
+    round: 1,
+    bracket_pos: 0,
+    home_team_id: null,
+    away_team_id: null,
+    next_key: null,
+    next_slot: null,
+  });
+  return out;
+}
+
+/** Qualified teams from group standings, as knockout seeds: all 1st places, then 2nd places... */
+export function groupQualifiers(
+  groups: Record<string, string[]>,
+  matches: MatchLite[],
+  s: Settings,
+): string[] {
+  const names = Object.keys(groups).sort();
+  const tables = names.map((g) =>
+    standings(groups[g] ?? [], matches.filter((m) => m.stage === "grupo" && m.group_name === g), s).map((r) => r.team_id),
+  );
+  const out: string[] = [];
+  for (let pos = 0; pos < s.qualifiersPerGroup; pos++) {
+    // alternate group order on each line so 1A meets 2B, 1B meets 2A
+    const line = tables.map((t) => t[pos]).filter(Boolean) as string[];
+    out.push(...line);
+  }
+  return out;
+}
+
+/* ---------------- volleyball scoring ---------------- */
+
+export interface SetScore {
+  h: number;
+  a: number;
+}
+export interface VolleyRules {
+  bestOf: number;
+  setPoints: number;
+  tieBreakPoints: number;
+  winBy2: boolean;
+}
+export interface VolleyState {
+  /** Finished sets followed by the set being played (when the match isn't decided). */
+  sets: SetScore[];
+  setsHome: number;
+  setsAway: number;
+  /** 1-based number of the set being played (or the last one, once decided). */
+  currentSet: number;
+  /** "home" | "away" when one team already won enough sets. */
+  winner: "home" | "away" | null;
+  setsToWin: number;
+}
+
+export const setsToWin = (bestOf: number) => Math.floor(Math.max(1, bestOf) / 2) + 1;
+
+/** Points needed to close set number n (1-based). */
+export function targetFor(n: number, r: VolleyRules) {
+  return n === Math.max(1, r.bestOf) && r.bestOf > 1 ? r.tieBreakPoints : r.setPoints;
+}
+
+export function setIsOver(s: SetScore, target: number, winBy2: boolean) {
+  const top = Math.max(s.h, s.a);
+  return top >= target && (!winBy2 || Math.abs(s.h - s.a) >= 2);
+}
+
+/**
+ * Replays rally points ("home" or "away", in order) into sets.
+ * Points after the match is decided are ignored.
+ */
+export function volleyState(points: ("home" | "away")[], r: VolleyRules): VolleyState {
+  const need = setsToWin(r.bestOf);
+  const sets: SetScore[] = [{ h: 0, a: 0 }];
+  let sh = 0;
+  let sa = 0;
+  let winner: VolleyState["winner"] = null;
+  for (const p of points) {
+    if (winner) break;
+    const cur = sets[sets.length - 1]!;
+    if (p === "home") cur.h++;
+    else cur.a++;
+    if (setIsOver(cur, targetFor(sets.length, r), r.winBy2)) {
+      if (cur.h > cur.a) sh++;
+      else sa++;
+      if (sh >= need) winner = "home";
+      else if (sa >= need) winner = "away";
+      else sets.push({ h: 0, a: 0 });
+    }
+  }
+  return { sets, setsHome: sh, setsAway: sa, currentSet: sets.length, winner, setsToWin: need };
+}
+
+/** Readable partials: "25-20, 18-25, 15-12". Skips an empty set not yet started. */
+export function setsText(sets: unknown, sep = ", ") {
+  const list = Array.isArray(sets) ? (sets as SetScore[]) : [];
+  return list
+    .filter((s, i) => i < list.length - 1 || s.h + s.a > 0)
+    .map((s) => `${s.h}-${s.a}`)
+    .join(sep);
+}
+
+export function readSets(sets: unknown): SetScore[] {
+  return Array.isArray(sets) ? (sets as SetScore[]).filter((s) => s && typeof s.h === "number" && typeof s.a === "number") : [];
 }
