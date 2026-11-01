@@ -76,7 +76,7 @@ async function ensureAdminAccount(db: Db): Promise<{ id: string; temporary: bool
       password: `${crypto.randomUUID()}Aa1!`, // 40 characters; Supabase accepts at most 72
       email_confirm: true,
       app_metadata: { created_by_admin: true, must_change_password: true },
-      user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME },
+      user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME, signup_token: await signupToken(db) },
     });
     if (error && !/already/i.test(error.message)) throw new Error(ptAuthError(error.message));
     found = data?.user ? { id: data.user.id as string } : await findUserByEmail(db, ADMIN_EMAIL);
@@ -97,8 +97,17 @@ async function sessionFor(db: Db, email: string) {
   return v.session as { access_token: string; refresh_token: string };
 }
 
+/** Secret the database signup guard expects (migration 0005). Null while that migration isn't applied. */
+async function signupToken(db: Db): Promise<string | null> {
+  const { data, error } = await db.from("app_secrets").select("value").eq("key", "signup_token").maybeSingle();
+  if (error || !data) return null;
+  return (data as { value: string }).value;
+}
+
 /** Supabase Auth messages in Portuguese. */
 function ptAuthError(msg: string) {
+  if (/database error creating new user/i.test(msg))
+    return "O banco recusou a criação da conta. Falta aplicar a migração drizzle/migrations/0005_corrige_cadastro.sql (uma vez só).";
   if (/weak|easy to guess|pwned/i.test(msg)) return "Senha muito fraca ou conhecida. Escolha outra, misturando letras, números e símbolos.";
   if (/at least \d+ characters|too short/i.test(msg)) return "A senha é curta demais.";
   return msg;
@@ -247,7 +256,7 @@ export const createUser = createServerFn({ method: "POST" })
       password: data.password,
       email_confirm: true,
       app_metadata: { created_by_admin: true },
-      user_metadata: { full_name: data.name || username, username },
+      user_metadata: { full_name: data.name || username, username, signup_token: await signupToken(db) },
     });
     if (error) throw new Error(/already/i.test(error.message) ? "Já existe uma conta com este nome de usuário." : ptAuthError(error.message));
     if (data.admin) await db.from("app_admins").upsert({ email }, { onConflict: "email" });
