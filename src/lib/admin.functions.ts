@@ -73,7 +73,7 @@ async function ensureAdminAccount(db: Db): Promise<{ id: string; temporary: bool
   if (!found) {
     const { data, error } = await db.auth.admin.createUser({
       email: ADMIN_EMAIL,
-      password: `${crypto.randomUUID()}-${crypto.randomUUID()}`,
+      password: `${crypto.randomUUID()}Aa1!`, // 40 characters; Supabase accepts at most 72
       email_confirm: true,
       app_metadata: { created_by_admin: true, must_change_password: true },
       user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME },
