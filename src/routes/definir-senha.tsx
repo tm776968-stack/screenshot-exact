@@ -44,7 +44,10 @@ function DefinirSenha() {
             className="mt-6 space-y-4 rounded-xl border bg-card p-5"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (p1 !== p2) return toast.error("As senhas não conferem.");
+              if (p1 !== p2) {
+                toast.error("As senhas não conferem.");
+                return;
+              }
               setBusy(true);
               try {
                 await changeOwnPassword({ data: { password: p1 } });

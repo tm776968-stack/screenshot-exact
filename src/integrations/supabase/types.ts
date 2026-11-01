@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_admins: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           birth_year_max: number | null
@@ -101,6 +116,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      login_attempts: {
+        Row: {
+          email: string
+          failed: number
+          last_attempt_at: string
+          locked: boolean
+        }
+        Insert: {
+          email: string
+          failed?: number
+          last_attempt_at?: string
+          locked?: boolean
+        }
+        Update: {
+          email?: string
+          failed?: number
+          last_attempt_at?: string
+          locked?: boolean
+        }
+        Relationships: []
       }
       match_events: {
         Row: {
@@ -194,6 +230,7 @@ export type Database = {
           period: number
           round: number
           scheduled_at: string | null
+          sets: Json
           stage: string
           status: Database["public"]["Enums"]["match_status"]
           tournament_id: string
@@ -219,6 +256,7 @@ export type Database = {
           period?: number
           round?: number
           scheduled_at?: string | null
+          sets?: Json
           stage?: string
           status?: Database["public"]["Enums"]["match_status"]
           tournament_id: string
@@ -244,6 +282,7 @@ export type Database = {
           period?: number
           round?: number
           scheduled_at?: string | null
+          sets?: Json
           stage?: string
           status?: Database["public"]["Enums"]["match_status"]
           tournament_id?: string
@@ -502,14 +541,17 @@ export type Database = {
       tournaments: {
         Row: {
           banner_url: string | null
+          category: string | null
           created_at: string
           end_date: string | null
           format: string
           id: string
           location: string | null
           logo_url: string | null
+          naipe: string | null
           name: string
           owner_id: string
+          parent_id: string | null
           primary_color: string | null
           published: boolean
           rules: string | null
@@ -521,14 +563,17 @@ export type Database = {
         }
         Insert: {
           banner_url?: string | null
+          category?: string | null
           created_at?: string
           end_date?: string | null
           format?: string
           id?: string
           location?: string | null
           logo_url?: string | null
+          naipe?: string | null
           name: string
           owner_id?: string
+          parent_id?: string | null
           primary_color?: string | null
           published?: boolean
           rules?: string | null
@@ -540,14 +585,17 @@ export type Database = {
         }
         Update: {
           banner_url?: string | null
+          category?: string | null
           created_at?: string
           end_date?: string | null
           format?: string
           id?: string
           location?: string | null
           logo_url?: string | null
+          naipe?: string | null
           name?: string
           owner_id?: string
+          parent_id?: string | null
           primary_color?: string | null
           published?: boolean
           rules?: string | null
@@ -557,7 +605,15 @@ export type Database = {
           start_date?: string | null
           status?: Database["public"]["Enums"]["tournament_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tournaments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       venues: {
         Row: {
@@ -591,6 +647,7 @@ export type Database = {
     }
     Functions: {
       can_edit_tournament: { Args: { _tid: string }; Returns: boolean }
+      is_admin: { Args: never; Returns: boolean }
       is_player_eligible: {
         Args: { _category_id: string; _player_id: string }
         Returns: boolean
