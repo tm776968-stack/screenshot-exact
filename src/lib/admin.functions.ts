@@ -62,18 +62,46 @@ export type LoginResult =
 
 const LOCKED_MSG = "Conta bloqueada após 5 tentativas erradas. Peça ao administrador para desbloquear.";
 
-/** Creates the "Admin" account with the temporary password the first time someone signs in as Admin. */
-async function ensureAdminAccount(db: Db) {
-  if (await findUserByEmail(db, ADMIN_EMAIL)) return;
-  const { error } = await db.auth.admin.createUser({
-    email: ADMIN_EMAIL,
-    password: ADMIN_TEMP_PASSWORD,
-    email_confirm: true,
-    app_metadata: { created_by_admin: true, must_change_password: true },
-    user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME },
-  });
-  if (error && !/already/i.test(error.message)) throw new Error(error.message);
+/**
+ * Creates the "Admin" account the first time someone signs in as Admin.
+ * Supabase refuses weak passwords such as the temporary 12345678, so the account gets a random
+ * password nobody knows; the temporary password is checked here instead (see loginWithLimit)
+ * until the administrator chooses a real one.
+ */
+async function ensureAdminAccount(db: Db): Promise<{ id: string; temporary: boolean }> {
+  let found = await findUserByEmail(db, ADMIN_EMAIL);
+  if (!found) {
+    const { data, error } = await db.auth.admin.createUser({
+      email: ADMIN_EMAIL,
+      password: `${crypto.randomUUID()}-${crypto.randomUUID()}`,
+      email_confirm: true,
+      app_metadata: { created_by_admin: true, must_change_password: true },
+      user_metadata: { full_name: "Administrador", username: ADMIN_USERNAME },
+    });
+    if (error && !/already/i.test(error.message)) throw new Error(ptAuthError(error.message));
+    found = data?.user ? { id: data.user.id as string } : await findUserByEmail(db, ADMIN_EMAIL);
+  }
   await db.from("app_admins").upsert({ email: ADMIN_EMAIL }, { onConflict: "email" });
+  if (!found) throw new Error("Não foi possível preparar a conta Admin. Tente de novo.");
+  const { data: u } = await db.auth.admin.getUserById(found.id);
+  return { id: found.id, temporary: !!u?.user?.app_metadata?.["must_change_password"] };
+}
+
+/** Opens a session for an account without its password (server only, used for the temporary admin password). */
+async function sessionFor(db: Db, email: string) {
+  const { data, error } = await db.auth.admin.generateLink({ type: "magiclink", email });
+  if (error) throw new Error(error.message);
+  const auth = await publicAuthClient();
+  const { data: v, error: e2 } = await auth.auth.verifyOtp({ token_hash: data.properties.hashed_token, type: "magiclink" });
+  if (e2 || !v.session) throw new Error(e2?.message ?? "Não foi possível abrir a sessão.");
+  return v.session as { access_token: string; refresh_token: string };
+}
+
+/** Supabase Auth messages in Portuguese. */
+function ptAuthError(msg: string) {
+  if (/weak|easy to guess|pwned/i.test(msg)) return "Senha muito fraca ou conhecida. Escolha outra, misturando letras, números e símbolos.";
+  if (/at least \d+ characters|too short/i.test(msg)) return "A senha é curta demais.";
+  return msg;
 }
 
 export const loginWithLimit = createServerFn({ method: "POST" })
@@ -82,7 +110,7 @@ export const loginWithLimit = createServerFn({ method: "POST" })
     const email = loginToEmail(data.login);
     if (!email) return { ok: false, locked: false, remaining: MAX_LOGIN_ATTEMPTS, message: "Usuário inválido. Use letras, números, ponto, hífen ou sublinhado." };
     const db = await adminDb();
-    if (email === ADMIN_EMAIL) await ensureAdminAccount(db);
+    const admin = email === ADMIN_EMAIL ? await ensureAdminAccount(db) : null;
 
     let { data: row } = await db.from("login_attempts").select("*").eq("email", email).maybeSingle();
     if (row?.locked && (await isAdminEmail(db, email))) {
@@ -93,6 +121,13 @@ export const loginWithLimit = createServerFn({ method: "POST" })
       }
     }
     if (row?.locked) return { ok: false, locked: true, remaining: 0, message: LOCKED_MSG };
+
+    // Temporary password of the Admin account, valid only until a real one is chosen.
+    if (admin?.temporary && data.password === ADMIN_TEMP_PASSWORD) {
+      const session = await sessionFor(db, email);
+      await db.from("login_attempts").delete().eq("email", email);
+      return { ok: true, access_token: session.access_token, refresh_token: session.refresh_token, mustChangePassword: true };
+    }
 
     const auth = await publicAuthClient();
     const { data: res, error } = await auth.auth.signInWithPassword({ email, password: data.password });
@@ -133,7 +168,7 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
       password: data.password,
       app_metadata: { ...(u.user?.app_metadata ?? {}), must_change_password: false },
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(ptAuthError(error.message));
     return { ok: true };
   });
 
@@ -214,7 +249,7 @@ export const createUser = createServerFn({ method: "POST" })
       app_metadata: { created_by_admin: true },
       user_metadata: { full_name: data.name || username, username },
     });
-    if (error) throw new Error(/already/i.test(error.message) ? "Já existe uma conta com este nome de usuário." : error.message);
+    if (error) throw new Error(/already/i.test(error.message) ? "Já existe uma conta com este nome de usuário." : ptAuthError(error.message));
     if (data.admin) await db.from("app_admins").upsert({ email }, { onConflict: "email" });
     return { ok: true };
   });
@@ -239,7 +274,7 @@ export const setUserPassword = createServerFn({ method: "POST" })
     const db = await requireAdmin(context.claims as Record<string, unknown>);
     if (data.password.length < 6) throw new Error("A senha precisa ter pelo menos 6 caracteres.");
     const { error } = await db.auth.admin.updateUserById(data.id, { password: data.password });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(ptAuthError(error.message));
     await db.from("login_attempts").delete().eq("email", data.email);
     return { ok: true };
   });

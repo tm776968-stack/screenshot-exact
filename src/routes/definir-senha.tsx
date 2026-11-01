@@ -75,6 +75,7 @@ function DefinirSenha() {
               <Label htmlFor="p2">Repita a senha</Label>
               <Input id="p2" type="password" minLength={6} required value={p2} onChange={(e) => setP2(e.target.value)} autoComplete="new-password" />
             </div>
+            <p className="text-xs text-muted-foreground">Use pelo menos 8 caracteres misturando letras, números e símbolos. Senhas comuns, como 12345678, são recusadas.</p>
             <Button type="submit" size="lg" className="w-full" disabled={busy}>
               Salvar senha
             </Button>
