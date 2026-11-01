@@ -58,8 +58,9 @@ export function StepPublicar({ b, isOwner }: { b: Bundle; isOwner: boolean }) {
                 const patch = v && t.status === "rascunho" ? { published: v, status: "inscricoes" as const } : { published: v };
                 const { error } = await supabase.from("tournaments").update(patch).eq("id", t.id);
                 if (error) throw error;
-                // Categories follow the main tournament's status.
-                if ("status" in patch) await supabase.from("tournaments").update({ status: patch.status }).eq("parent_id", t.id);
+                // Categories follow the main tournament's publication and status.
+                const { error: e2 } = await supabase.from("tournaments").update(patch).eq("parent_id", t.id);
+                if (e2) throw e2;
               }, v ? "Torneio publicado!" : "Torneio despublicado.")
             }
           />
@@ -110,12 +111,12 @@ export function StepPublicar({ b, isOwner }: { b: Bundle; isOwner: boolean }) {
         </div>
       </Section>
 
-      <CoOrganizers tournamentId={t.id} isOwner={isOwner} />
+      <CoOrganizers tournamentId={t.id} divisionIds={b.divisions.map((d) => d.id)} isOwner={isOwner} />
     </div>
   );
 }
 
-function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner: boolean }) {
+function CoOrganizers({ tournamentId, divisionIds, isOwner }: { tournamentId: string; divisionIds: string[]; isOwner: boolean }) {
   const [email, setEmail] = useState("");
   const { busy, run } = useAction();
   const q = useQuery({
@@ -147,6 +148,8 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
             const ok = await run(async () => {
               const { error } = await supabase.from("tournament_members").insert({ tournament_id: tournamentId, email: v });
               if (error) throw error.code === "23505" ? new Error("Este usuário já foi convidado.") : error;
+              // Same access to every category of the tournament.
+              if (divisionIds.length) await supabase.from("tournament_members").insert(divisionIds.map((id) => ({ tournament_id: id, email: v })));
               await q.refetch();
             }, "Convite registrado.");
             if (ok) setEmail("");
@@ -173,6 +176,7 @@ function CoOrganizers({ tournamentId, isOwner }: { tournamentId: string; isOwner
                   run(async () => {
                     const { error } = await supabase.from("tournament_members").delete().eq("id", m.id);
                     if (error) throw error;
+                    if (divisionIds.length) await supabase.from("tournament_members").delete().eq("email", m.email).in("tournament_id", divisionIds);
                     await q.refetch();
                   })
                 }

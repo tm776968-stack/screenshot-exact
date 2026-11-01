@@ -86,10 +86,15 @@ export async function createDivision(root: Tournament, d: DivisionInput) {
     slug: `${root.slug}-${slugify(label) || "categoria"}-${Math.random().toString(36).slice(2, 5)}`.slice(0, 80),
     owner_id: u.user.id,
     status: root.status,
+    // Kept in step with the main tournament, so the category is visible and editable by the same
+    // people even where the database rules only look at the category itself.
+    published: root.published,
     settings: settings as unknown as Json,
   });
   if (error) throw error;
   await resetEventTypes(id, root.sport);
+  const { data: members } = await supabase.from("tournament_members").select("email").eq("tournament_id", root.id);
+  if (members?.length) await supabase.from("tournament_members").insert(members.map((m) => ({ tournament_id: id, email: m.email })));
   return { id };
 }
 
