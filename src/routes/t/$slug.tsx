@@ -21,7 +21,9 @@ import { LiveBadge } from "@/components/sport";
 import { Empty } from "@/components/views";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
-import { bundleById, bundleBySlug, useTournamentRealtime, type Bundle } from "@/lib/data";
+import { supabase } from "@/integrations/supabase/client";
+import { bundleById, bundleBySlug, type Bundle } from "@/lib/data";
+import { useLiveChannel, useLivePolling } from "@/lib/live";
 import { themeVars } from "@/lib/images";
 import { divisionLabel } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
@@ -65,7 +67,6 @@ function PublicPage() {
   const other = !!q.data && !!selected && selected !== q.data.tournament.id;
   const dq = useQuery({ ...bundleById(selected ?? ""), enabled: other });
   const b = other ? dq.data : q.data;
-  useTournamentRealtime(b?.tournament.id);
   if (q.isLoading || (other && dq.isLoading)) return <PageLoading />;
   if (!q.data || !b)
     return (
@@ -112,6 +113,22 @@ function PublicTournament({ b }: { b: Bundle }) {
   };
 
   const canEdit = !!user && (user.id === b.root.owner_id || user.id === b.tournament.owner_id);
+  // Co-organizers also count as organizers (checked once in the database, then cached).
+  const memberQ = useQuery({
+    queryKey: ["can-edit", b.tournament.id, user?.id],
+    enabled: !!user && !canEdit,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("can_edit_tournament", { _tid: b.tournament.id });
+      return !error && !!data;
+    },
+  });
+  const isOrganizer = canEdit || !!memberQ.data;
+  // Hybrid live strategy: organizers keep a WebSocket; everyone else gets a light refresh every
+  // 12 s, and only on the games tabs (the other tabs show data that doesn't change mid-game).
+  const gamesTab = tab === "ao-vivo" || tab === "proximos";
+  useLiveChannel([b.tournament.id], isOrganizer);
+  useLivePolling([b.tournament.id], { enabled: !isOrganizer && gamesTab, intervalMs: 12_000 });
   const noDivisions = !b.tournament.parent_id && b.divisions.length === 0;
   const showFilter = tab === "ao-vivo" || tab === "proximos" || tab === "chaveamento";
 

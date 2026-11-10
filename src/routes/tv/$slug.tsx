@@ -7,7 +7,8 @@ import { PageLoading } from "@/components/app-header";
 import { isLive, liveNow, results, upcoming } from "@/components/public-view";
 import { Countdown, currentSetPoints, LiveBadge, SetsLine, TeamCrest } from "@/components/sport";
 import { Empty } from "@/components/views";
-import { bundleById, bundleBySlug, teamMap, useTournamentsRealtime, type Bundle, type Match } from "@/lib/data";
+import { bundleById, bundleBySlug, teamMap, type Bundle, type Match } from "@/lib/data";
+import { useLiveChannel } from "@/lib/live";
 import { themeVars } from "@/lib/images";
 import { publicUrl } from "@/lib/manage";
 import { divisionLabel, fmtDateTime, readSettings, STAGE_LABEL, standings } from "@/lib/tournament";
@@ -27,7 +28,8 @@ function TvPage() {
   // Every category of the main tournament (or the tournament itself when it has none).
   const ids = base ? (base.divisions.length ? base.divisions.map((d) => d.id) : [base.tournament.id]) : [];
   const qs = useQueries({ queries: ids.map((id) => ({ ...bundleById(id), enabled: !!base })) });
-  useTournamentsRealtime(ids);
+  // The big screen keeps a WebSocket open (it pauses on its own if the screen is hidden).
+  useLiveChannel(ids);
   if (q.isLoading || qs.some((x) => x.isLoading)) return <PageLoading />;
   if (!base)
     return (

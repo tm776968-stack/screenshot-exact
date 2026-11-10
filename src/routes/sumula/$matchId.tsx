@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlert, ChevronLeft, Flag, Play, Plus, Trophy, Undo2 } from "lucide-react";
 import { PageLoading } from "@/components/app-header";
 import { useAction } from "@/components/manage/shared";
@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useRequireAuth } from "@/lib/auth";
-import { bundleById, teamMap, useTournamentRealtime, type Bundle, type EventType, type Match, type Team } from "@/lib/data";
+import { bundleById, teamMap, type Bundle, type EventType, type Match, type Team } from "@/lib/data";
+import { refreshLive, useLiveChannel } from "@/lib/live";
 import { closeMatch, matchesInOrder, readExt, syncVolleyScore } from "@/lib/manage";
 import { divisionLabel, MATCH_STATUS_LABEL, readSets, setsToWin, STAGE_LABEL, suspendedPlayers, targetFor } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ function Sumula() {
   const { matchId } = Route.useParams();
   const { user, loading } = useRequireAuth();
   const { loading: l2, b } = useMatchBundle(matchId, !!user);
-  useTournamentRealtime(b?.tournament.id);
+  useLiveChannel(b ? [b.tournament.id] : []);
   if (loading || !user || l2) return <PageLoading />;
   const m = b?.matches.find((x) => x.id === matchId);
   if (!b || !m)
@@ -51,12 +52,21 @@ function Sumula() {
   return <SumulaView b={b} m={m} />;
 }
 
+/**
+ * Scoresheet actions refresh only the matches and the events of live matches afterwards,
+ * instead of reloading the whole tournament on every point.
+ */
+function useLiveAction(b: Bundle) {
+  const qc = useQueryClient();
+  return useAction({ refresh: () => refreshLive(qc, [b.tournament.id]) });
+}
+
 function SumulaView({ b, m }: { b: Bundle; m: Match }) {
   const teams = teamMap(b.teams);
   const home = m.home_team_id ? teams.get(m.home_team_id) ?? null : null;
   const away = m.away_team_id ? teams.get(m.away_team_id) ?? null : null;
   const s = readExt(b.tournament.settings);
-  const { busy, run } = useAction();
+  const { busy, run } = useLiveAction(b);
   const [pick, setPick] = useState<{ et: EventType; team: Team } | null>(null);
   const [closing, setClosing] = useState(false);
   const [wo, setWo] = useState(false);
@@ -382,7 +392,7 @@ function CloseDialog({ b, m, onClose }: { b: Bundle; m: Match; onClose: () => vo
   const need = setsToWin(s.bestOf);
   const tied = m.home_score === m.away_score;
   const decided = m.home_score >= need || m.away_score >= need;
-  const { busy, run } = useAction();
+  const { busy, run } = useLiveAction(b);
   const knockout = !["liga", "grupo"].includes(m.stage);
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -428,7 +438,7 @@ function CloseDialog({ b, m, onClose }: { b: Bundle; m: Match; onClose: () => vo
 
 function WoDialog({ b, m, home, away, onClose }: { b: Bundle; m: Match; home: Team; away: Team; onClose: () => void }) {
   const [winner, setWinner] = useState<string>(home.id);
-  const { busy, run } = useAction();
+  const { busy, run } = useLiveAction(b);
   const s = readExt(b.tournament.settings);
   const need = setsToWin(s.bestOf);
   return (

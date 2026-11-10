@@ -13,7 +13,8 @@ import { LiveBadge } from "@/components/sport";
 import { Empty } from "@/components/views";
 import { Button } from "@/components/ui/button";
 import { useRequireAuth } from "@/lib/auth";
-import { bundleById, useTournamentRealtime } from "@/lib/data";
+import { bundleById } from "@/lib/data";
+import { useLiveChannel } from "@/lib/live";
 import { divisionLabel, readSettings, STATUS_LABEL, teamSizeLabel } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,8 @@ function Manage() {
   const search = Route.useSearch();
   const { user, loading } = useRequireAuth();
   const q = useQuery({ ...bundleById(id), enabled: !!user });
-  useTournamentRealtime(q.data?.tournament.id);
+  // Organizers get instant updates over WebSocket.
+  useLiveChannel(q.data ? [q.data.tournament.id] : []);
 
   if (loading || !user || q.isLoading) return <PageLoading />;
   const b = q.data;

@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { queryOptions, useQueryClient } from "@tanstack/react-query";
+import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -58,9 +57,18 @@ async function loadBundle(t: Tournament): Promise<Bundle> {
   };
 }
 
+/**
+ * Teams, players, courts, rules and categories rarely change during the games, and live changes
+ * (scores, sets, status, events) are patched straight into the cache by src/lib/live.ts.
+ * So a loaded bundle stays fresh: switching tabs or categories doesn't reload it, and returning
+ * to the window doesn't trigger a full reload (live.ts revalidates lightly instead).
+ */
+const BUNDLE_CACHE = { staleTime: 5 * 60_000, gcTime: 30 * 60_000, refetchOnWindowFocus: false } as const;
+
 export const bundleBySlug = (slug: string) =>
   queryOptions({
     queryKey: ["bundle", "slug", slug],
+    ...BUNDLE_CACHE,
     queryFn: async () => {
       const { data, error } = await supabase.from("tournaments").select("*").eq("slug", slug).maybeSingle();
       if (error) throw error;
@@ -79,6 +87,7 @@ export async function fetchBundle(id: string): Promise<Bundle | null> {
 export const bundleById = (id: string) =>
   queryOptions({
     queryKey: ["bundle", "id", id],
+    ...BUNDLE_CACHE,
     queryFn: async () => {
       const { data, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle();
       if (error) throw error;
@@ -86,31 +95,6 @@ export const bundleById = (id: string) =>
       return loadBundle(data);
     },
   });
-
-/** Live updates for matches and events of a tournament. */
-export function useTournamentRealtime(tournamentId: string | undefined) {
-  useTournamentsRealtime(tournamentId ? [tournamentId] : []);
-}
-
-/** Live updates for several categories at once (TV mode). */
-export function useTournamentsRealtime(tournamentIds: string[]) {
-  const qc = useQueryClient();
-  const key = [...tournamentIds].sort().join(",");
-  useEffect(() => {
-    if (!key) return;
-    const refresh = () => qc.invalidateQueries({ queryKey: ["bundle"] });
-    let ch = supabase.channel(`t-${Math.random().toString(36).slice(2)}`);
-    for (const id of key.split(",")) {
-      ch = ch
-        .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${id}` }, refresh)
-        .on("postgres_changes", { event: "*", schema: "public", table: "match_events", filter: `tournament_id=eq.${id}` }, refresh);
-    }
-    ch.subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [key, qc]);
-}
 
 export function teamMap(teams: Team[]) {
   return new Map(teams.map((t) => [t.id, t]));

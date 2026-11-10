@@ -13,9 +13,13 @@ export function useRefresh() {
   return () => qc.invalidateQueries({ queryKey: ["bundle"] });
 }
 
-/** Runs an async action with a toast on error and a refresh afterwards. */
-export function useAction() {
-  const refresh = useRefresh();
+/**
+ * Runs an async action with a toast on error and a refresh afterwards.
+ * `refresh` replaces the default full reload (the scoresheet uses a light one).
+ */
+export function useAction(opts: { refresh?: () => Promise<unknown> } = {}) {
+  const fullRefresh = useRefresh();
+  const refresh = opts.refresh ?? fullRefresh;
   const [busy, setBusy] = useState(false);
   async function run(fn: () => Promise<unknown>, success?: string) {
     setBusy(true);
